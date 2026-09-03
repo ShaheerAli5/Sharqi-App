@@ -385,7 +385,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                         Icon(
                           Icons.verified_user_outlined,
                           size: 16,
-                          color: const Color(0xFF10B981).withOpacity(0.9),
+                          color: const Color(0xFF10B981).withValues(alpha: 0.9),
                         ),
                         const SizedBox(width: 8), // Exact Figma Gap: 8px
                         Text(

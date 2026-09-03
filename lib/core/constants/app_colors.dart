@@ -30,4 +30,18 @@ class AppColors {
 
   static const Color border = Color(0xFFE0E0E0);
   static const Color divider = Color(0xFFEEEEEE);
+
+  // Dashboard
+  static const Color categoryChipBg = Color(0xFFEBE5E1);
+  static const Color empChipBg = Color(0xFFEBE5E1);
+  static const Color empChipText = Color(0xFF8A8481);
+  static const Color phoneChipBg = Color(0xFFFDE8EE);
+  static const Color phoneChipText = Color(0xFF8B183A);
+  static const Color whatsappChipBg = Color(0xFFE2F7EB);
+  static const Color whatsappChipText = Color(0xFF1B6338);
+  static const Color whatsappIconColor = Color(0xFF25D366);
+  static const Color detailIconColor = Color(0xFF8B183A);
+  static const Color detailLabelColor = Color(0xFF78716E);
+  static const Color detailValueColor = Color(0xFF1F1F1F);
+  static const Color dashboardDivider = Color(0xFFEDE7E3);
 }
