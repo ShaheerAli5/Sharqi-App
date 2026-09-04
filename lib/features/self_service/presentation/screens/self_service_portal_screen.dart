@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../routes/app_routes.dart';
 import '../../../dashboard/presentation/widgets/app_drawer.dart';
+import 'track_case_screen.dart';
 
 class SelfServicePortalScreen extends StatefulWidget {
   const SelfServicePortalScreen({super.key});
@@ -53,21 +55,25 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Subtitle Intro Text
-                    const Text(
-                      AppStrings.portalIntroSubtitle,
-                      style: TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1A1310),
-                        height: 1.35,
+                    // Subtitle Intro Text (Fill 354px x Hug 41px, Font Outfit, Size 14px, Weight 400, LineHeight 20.3px, LetterSpacing -0.14px)
+                    const SizedBox(
+                      width: double.infinity,
+                      child: Text(
+                        AppStrings.portalIntroSubtitle,
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 14, // Exact Size: 14px
+                          fontWeight: FontWeight.w400, // Exact Weight: 400 Regular
+                          color: Color(0xFF1A1310), // Exact Hex: #1A1310
+                          height: 20.3 / 14, // Exact Line Height: 20.3px
+                          letterSpacing: -0.14, // Exact Letter Spacing: -0.14px
+                        ),
                       ),
                     ),
 
                     const SizedBox(height: 18),
 
-                    // div.ssp-list: Cards List (Gap 14px)
+                    // div.ssp-list: Cards List (Fixed 354px, Gap 14px)
                     // Card 1: COMPLAINT
                     _PortalServiceCard(
                       icon: Icons.add_rounded,
@@ -78,8 +84,12 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
                       primaryButtonIcon: Icons.add_rounded,
                       secondaryButtonLabel: AppStrings.trackCase,
                       secondaryButtonIcon: Icons.search_rounded,
-                      onPrimaryTap: () {},
-                      onSecondaryTap: () {},
+                      onPrimaryTap: () {
+                        Navigator.pushNamed(context, AppRoutes.complaintForm);
+                      },
+                      onSecondaryTap: () {
+                        Navigator.pushNamed(context, AppRoutes.trackCase);
+                      },
                     ),
 
                     const SizedBox(height: 14), // Exact Gap: 14px
@@ -94,8 +104,13 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
                       primaryButtonIcon: Icons.group_outlined,
                       secondaryButtonLabel: AppStrings.trackCase,
                       secondaryButtonIcon: Icons.search_rounded,
-                      onPrimaryTap: () {},
-                      onSecondaryTap: () {},
+                      onPrimaryTap: () {
+                        Navigator.pushNamed(
+                            context, AppRoutes.employeeRequestForm);
+                      },
+                      onSecondaryTap: () {
+                        Navigator.pushNamed(context, AppRoutes.trackCase);
+                      },
                     ),
 
                     const SizedBox(height: 14), // Exact Gap: 14px
@@ -110,8 +125,21 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
                       primaryButtonIcon: Icons.calendar_today_rounded,
                       secondaryButtonLabel: AppStrings.trackCase,
                       secondaryButtonIcon: Icons.search_rounded,
-                      onPrimaryTap: () {},
-                      onSecondaryTap: () {},
+                      onPrimaryTap: () {
+                        Navigator.pushNamed(
+                            context, AppRoutes.leaveRequestForm);
+                      },
+                      onSecondaryTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.trackCase,
+                          arguments: const TrackCaseArguments(
+                            labelText: 'LEAVE CODE',
+                            hintText: '',
+                            buttonText: 'Search Leave',
+                          ),
+                        );
+                      },
                     ),
 
                     const SizedBox(height: 14), // Exact Gap: 14px
@@ -124,7 +152,10 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
                       hasSeeManual: false,
                       primaryButtonLabel: AppStrings.brightIdeaButton,
                       primaryButtonIcon: Icons.lightbulb_outline_rounded,
-                      onPrimaryTap: () {},
+                      onPrimaryTap: () {
+                        Navigator.pushNamed(
+                            context, AppRoutes.brightIdeaForm);
+                      },
                     ),
 
                     const SizedBox(height: 14), // Exact Gap: 14px
@@ -198,14 +229,15 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
                 ),
               ),
 
-              // Title Text: "SELF SERVICE PORTAL" (Width 157px x Height 15px, Size 12px, Weight 600 SemiBold, Letter spacing 1.68px)
+              // Title Text: "SELF SERVICE PORTAL" (Size 12px, Weight 600 SemiBold, Letter spacing 1.68px, Single Line)
               const SizedBox(
-                width: 157, // Exact Width: 157px
-                height: 15, // Exact Height: 15px
+                height: 15,
                 child: Center(
                   child: Text(
                     AppStrings.selfServicePortalTitle,
                     textAlign: TextAlign.center,
+                    maxLines: 1,
+                    softWrap: false,
                     style: TextStyle(
                       fontFamily: 'Outfit',
                       color: Colors.white,
@@ -342,18 +374,23 @@ class _PortalServiceCard extends StatelessWidget {
 
           const SizedBox(height: 16), // Exact Gap: 16px
 
-          // Action Buttons Row
+          // div.ssp-btn-row: Action Buttons Row (Fill 322px x Hug 34px, Gap 8px)
           Row(
             children: [
-              // Primary Button (Solid Burgundy)
+              // Primary Button (Hug 143px x Hug 34px, Radii TL10 TR10 BR10 BL4, Padding 8px 12px 8px 12px, Gap 6px, Color #C6134B)
               GestureDetector(
                 onTap: onPrimaryTap,
                 child: Container(
-                  height: 38,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFC6134B),
-                    borderRadius: BorderRadius.circular(12),
+                  height: 34, // Exact Height: Hug (34px)
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Exact Padding: 8px 12px 8px 12px
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFC6134B), // Exact Color: #C6134B
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(10), // Exact TL: 10px
+                      topRight: Radius.circular(10), // Exact TR: 10px
+                      bottomRight: Radius.circular(10), // Exact BR: 10px
+                      bottomLeft: Radius.circular(4), // Exact BL: 4px
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -363,13 +400,15 @@ class _PortalServiceCard extends StatelessWidget {
                         size: 16,
                         color: Colors.white,
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 6), // Exact Gap: 6px
                       Text(
                         primaryButtonLabel,
                         style: const TextStyle(
+                          fontFamily: 'Outfit',
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: Colors.white,
+                          height: 1.0,
                         ),
                       ),
                     ],
@@ -378,17 +417,22 @@ class _PortalServiceCard extends StatelessWidget {
               ),
 
               if (secondaryButtonLabel != null) ...[
-                const SizedBox(width: 10),
+                const SizedBox(width: 8), // Exact Gap: 8px
 
-                // Secondary Button (Soft Pink)
+                // Secondary Button (Hug 115px x Hug 34px, Radii TL10 TR10 BR10 BL4, Padding 8px 12px 8px 12px, Gap 6px, Color #FBE7EE)
                 GestureDetector(
                   onTap: onSecondaryTap,
                   child: Container(
-                    height: 38,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFCE8EE),
-                      borderRadius: BorderRadius.circular(12),
+                    height: 34, // Exact Height: Hug (34px)
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Exact Padding: 8px 12px 8px 12px
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFBE7EE), // Exact Hex: #FBE7EE
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(10), // Exact TL: 10px
+                        topRight: Radius.circular(10), // Exact TR: 10px
+                        bottomRight: Radius.circular(10), // Exact BR: 10px
+                        bottomLeft: Radius.circular(4), // Exact BL: 4px
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -399,14 +443,16 @@ class _PortalServiceCard extends StatelessWidget {
                             size: 16,
                             color: const Color(0xFFC6134B),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 6), // Exact Gap: 6px
                         ],
                         Text(
                           secondaryButtonLabel!,
                           style: const TextStyle(
+                            fontFamily: 'Outfit',
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFFC6134B),
+                            color: Color(0xFFC6134B), // Exact Color: #C6134B
+                            height: 1.0,
                           ),
                         ),
                       ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../routes/app_routes.dart';
@@ -15,6 +16,11 @@ class AppDrawer extends StatelessWidget {
         currentRoute == AppRoutes.home ||
         currentRoute == AppRoutes.splash;
     final isSelfServiceSelected = currentRoute == AppRoutes.selfServiceWeb;
+    final isRecordTimeInSelected = currentRoute == AppRoutes.recordTimeIn;
+    final isRecordTimeOutSelected = currentRoute == AppRoutes.recordTimeOut;
+    final isAttendanceListSelected = currentRoute == AppRoutes.attendanceList;
+    final isWorkPlanSelected = currentRoute == AppRoutes.workPlan;
+    final isNotificationsSelected = currentRoute == AppRoutes.notifications;
 
     return Drawer(
       width: screenWidth, // Full width drawer as shown in design
@@ -50,7 +56,7 @@ class AppDrawer extends StatelessWidget {
                             children: [
                               // 1. DASHBOARD
                               _DrawerMenuItem(
-                                icon: Icons.grid_view_rounded,
+                                assetPath: AppAssets.icDashboard,
                                 label: AppStrings.dashboardTitle,
                                 isSelected: isDashboardSelected,
                                 onTap: () {
@@ -68,7 +74,7 @@ class AppDrawer extends StatelessWidget {
 
                               // 2. SELF SERVICE WEB
                               _DrawerMenuItem(
-                                icon: Icons.desktop_windows_outlined,
+                                assetPath: AppAssets.icSelfServiceWeb,
                                 label: AppStrings.selfServiceWeb,
                                 isSelected: isSelfServiceSelected,
                                 onTap: () {
@@ -86,10 +92,17 @@ class AppDrawer extends StatelessWidget {
 
                               // 3. RECORD TIME IN
                               _DrawerMenuItem(
-                                icon: Icons.more_time_rounded,
+                                assetPath: AppAssets.icRecordTimeIn,
                                 label: AppStrings.recordTimeIn,
+                                isSelected: isRecordTimeInSelected,
                                 onTap: () {
                                   Navigator.pop(context);
+                                  if (!isRecordTimeInSelected) {
+                                    Navigator.pushReplacementNamed(
+                                      context,
+                                      AppRoutes.recordTimeIn,
+                                    );
+                                  }
                                 },
                               ),
 
@@ -97,10 +110,17 @@ class AppDrawer extends StatelessWidget {
 
                               // 4. RECORD TIME OUT
                               _DrawerMenuItem(
-                                icon: Icons.history_toggle_off_rounded,
+                                assetPath: AppAssets.icRecordTimeOut,
                                 label: AppStrings.recordTimeOut,
+                                isSelected: isRecordTimeOutSelected,
                                 onTap: () {
                                   Navigator.pop(context);
+                                  if (!isRecordTimeOutSelected) {
+                                    Navigator.pushReplacementNamed(
+                                      context,
+                                      AppRoutes.recordTimeOut,
+                                    );
+                                  }
                                 },
                               ),
 
@@ -108,10 +128,17 @@ class AppDrawer extends StatelessWidget {
 
                               // 5. ATTENDANCE LIST
                               _DrawerMenuItem(
-                                icon: Icons.assignment_outlined,
+                                assetPath: AppAssets.icAttendanceList,
                                 label: AppStrings.attendanceList,
+                                isSelected: isAttendanceListSelected,
                                 onTap: () {
                                   Navigator.pop(context);
+                                  if (!isAttendanceListSelected) {
+                                    Navigator.pushReplacementNamed(
+                                      context,
+                                      AppRoutes.attendanceList,
+                                    );
+                                  }
                                 },
                               ),
 
@@ -119,10 +146,17 @@ class AppDrawer extends StatelessWidget {
 
                               // 6. WORK PLAN
                               _DrawerMenuItem(
-                                icon: Icons.calendar_today_outlined,
+                                assetPath: AppAssets.icWorkPlan,
                                 label: AppStrings.workPlan,
+                                isSelected: isWorkPlanSelected,
                                 onTap: () {
                                   Navigator.pop(context);
+                                  if (!isWorkPlanSelected) {
+                                    Navigator.pushReplacementNamed(
+                                      context,
+                                      AppRoutes.workPlan,
+                                    );
+                                  }
                                 },
                               ),
 
@@ -130,10 +164,17 @@ class AppDrawer extends StatelessWidget {
 
                               // 7. NOTIFICATIONS
                               _DrawerMenuItem(
-                                icon: Icons.notifications_none_rounded,
+                                assetPath: AppAssets.icNotification,
                                 label: AppStrings.notifications,
+                                isSelected: isNotificationsSelected,
                                 onTap: () {
                                   Navigator.pop(context);
+                                  if (!isNotificationsSelected) {
+                                    Navigator.pushReplacementNamed(
+                                      context,
+                                      AppRoutes.notifications,
+                                    );
+                                  }
                                 },
                               ),
                             ],
@@ -416,13 +457,13 @@ class AppDrawer extends StatelessWidget {
 
 // button.nav-item
 class _DrawerMenuItem extends StatelessWidget {
-  final IconData icon;
+  final String assetPath;
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
 
   const _DrawerMenuItem({
-    required this.icon,
+    required this.assetPath,
     required this.label,
     this.isSelected = false,
     required this.onTap,
@@ -434,15 +475,13 @@ class _DrawerMenuItem extends StatelessWidget {
         isSelected ? const Color(0xFFFBE7EE) : Colors.transparent;
     final textColor =
         isSelected ? const Color(0xFFC6134B) : const Color(0xFF1A1310);
-    final iconColor =
-        isSelected ? const Color(0xFFC6134B) : const Color(0xFF1A1310);
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: double.infinity,
         height: 43,
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: const BorderRadius.only(
@@ -454,10 +493,11 @@ class _DrawerMenuItem extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(
-              icon,
-              size: 18,
-              color: iconColor,
+            Image.asset(
+              assetPath,
+              width: 22,
+              height: 22,
+              fit: BoxFit.contain,
             ),
             const SizedBox(width: 12),
             Text(
