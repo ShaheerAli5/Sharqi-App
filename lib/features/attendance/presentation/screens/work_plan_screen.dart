@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../routes/app_routes.dart';
 import '../../../dashboard/presentation/widgets/app_drawer.dart';
 
 enum WorkDayType { workDay, offDay, leave }
@@ -44,6 +45,14 @@ class WorkPlanScreen extends StatefulWidget {
 
 class _WorkPlanScreenState extends State<WorkPlanScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  void _onBackPressed(BuildContext context) {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+    }
+  }
 
   String _selectedMonth = 'Jun, 2025';
   final List<String> _months = [
@@ -240,7 +249,13 @@ class _WorkPlanScreenState extends State<WorkPlanScreen> {
       ),
     );
 
-    return Scaffold(
+    return PopScope(
+      canPop: Navigator.canPop(context),
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+      },
+      child: Scaffold(
       key: _scaffoldKey,
       drawer: const AppDrawer(),
       backgroundColor: AppColors.background,
@@ -365,7 +380,8 @@ class _WorkPlanScreenState extends State<WorkPlanScreen> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildSummaryCard() {
@@ -708,7 +724,7 @@ class _WorkPlanScreenState extends State<WorkPlanScreen> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
+                  onTap: () => _onBackPressed(context),
                   child: Container(
                     width: 44,
                     height: 44,
