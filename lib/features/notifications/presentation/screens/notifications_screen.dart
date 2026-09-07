@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../dashboard/presentation/widgets/app_drawer.dart';
+import 'notification_detail_screen.dart';
 
 class NotificationItem {
+  final String id;
   final String title;
   final String description;
   final String date;
@@ -11,8 +13,13 @@ class NotificationItem {
   final Color badgeBgColor;
   final Color badgeTextColor;
   final bool isUnread;
+  final String? englishBody;
+  final String? arabicBody;
+  final String? attachmentName;
+  final Map<String, String>? extraDetails;
 
   const NotificationItem({
+    required this.id,
     required this.title,
     required this.description,
     required this.date,
@@ -20,6 +27,10 @@ class NotificationItem {
     required this.badgeBgColor,
     required this.badgeTextColor,
     this.isUnread = false,
+    this.englishBody,
+    this.arabicBody,
+    this.attachmentName,
+    this.extraDetails,
   });
 }
 
@@ -35,6 +46,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   final List<NotificationItem> _notifications = const [
     NotificationItem(
+      id: '1',
       title: 'CMS Memo Update',
       description:
           'Please be informed that the memo has been updated. Kindly note that all requests must be submitted through the CMS.',
@@ -43,8 +55,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       badgeBgColor: Color(0xFFC6134B), // Solid Maroon/Red
       badgeTextColor: Colors.white,
       isUnread: true,
+      englishBody:
+          'Dear Team,\n\nPlease be informed that the memo has been updated. Kindly note that all requests must be submitted through the CMS.\n\nThank you.',
+      arabicBody:
+          'الفريق العزيز،\n\nيرجى العلم بأنه تم تحديث المذكرة. نرجو أخذ العلم بأن جميع الطلبات يجب تقديمها عبر نظام إدارة المحتوى (CMS).\n\nشكراً لكم.',
+      attachmentName: 'CMS_Memo_2025_Update.pdf',
     ),
     NotificationItem(
+      id: '2',
       title: 'Leave Request Approved',
       description:
           'Your annual leave request from 12 Jul to 18 Jul has been approved by your duty manager.',
@@ -53,8 +71,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       badgeBgColor: Color(0xFFE2F7EB), // Soft green
       badgeTextColor: Color(0xFF1E854A), // Green text
       isUnread: true,
+      englishBody:
+          'Dear Employee,\n\nYour annual leave request has been officially approved by your department manager.\n\nEnjoy your time off and have a safe trip!',
+      arabicBody:
+          'عزيزي الموظف،\n\nتم اعتماد طلب الإجازة السنوية الخاص بك رسمياً من قبل مدير القسم.\n\nنتمنى لك إجازة سعيدة!',
+      extraDetails: {
+        'Leave Type': 'Annual Leave',
+        'Duration': '12 Jul 2025 - 18 Jul 2025 (7 Days)',
+        'Approved By': 'Duty Manager (Ahmed Al-Mansoori)',
+      },
+      attachmentName: 'Leave_Approval_Certificate.pdf',
     ),
     NotificationItem(
+      id: '3',
       title: 'Salary Slip Available',
       description:
           'Your salary slip for January 2025 is now available for download.',
@@ -63,8 +92,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       badgeBgColor: Color(0xFFFDEED9), // Soft tan/amber
       badgeTextColor: Color(0xFF8A5A10), // Brown text
       isUnread: false,
+      englishBody:
+          'Dear Employee,\n\nYour salary slip for the month of January 2025 has been successfully processed and is now available for secure review and download.',
+      arabicBody:
+          'عزيزي الموظف،\n\nقسيمة راتب شهر يناير 2025 جاهزة الآن للاطلاع والتحميل الآمن.',
+      extraDetails: {
+        'Pay Period': 'January 2025',
+        'Net Pay': 'QAR 12,500.00',
+        'Payment Date': '28-Jan-2025',
+      },
+      attachmentName: 'Salary_Slip_Jan_2025.pdf',
     ),
     NotificationItem(
+      id: '4',
       title: 'Shift Schedule Updated',
       description:
           'Your work schedule at Ritz Carlton Hotel has been revised for next week.',
@@ -73,8 +113,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       badgeBgColor: Color(0xFFEFECE8), // Soft grey
       badgeTextColor: Color(0xFF666666), // Grey text
       isUnread: false,
+      englishBody:
+          'Dear Staff,\n\nYour work roster at Ritz Carlton Hotel has been updated for the upcoming week. Please review your shift timings below.',
+      arabicBody:
+          'عزيزي الموظف،\n\nتم تحديث جدول مناوباتك في فندق ريتز كارلتون للأسبوع القادم. يرجى مراجعة المواعيد أدناه.',
+      extraDetails: {
+        'Location': 'Ritz Carlton Hotel, Doha',
+        'Shift Time': '08:00 AM - 04:00 PM (Morning Shift)',
+        'Effective Dates': '03 Feb 2025 - 09 Feb 2025',
+      },
+      attachmentName: 'Shift_Schedule_Feb_W1.pdf',
     ),
     NotificationItem(
+      id: '5',
       title: 'QID Expiry Reminder',
       description:
           'Your Qatar ID is set to expire in 30 days. Please renew and update your documents.',
@@ -83,6 +134,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       badgeBgColor: Color(0xFFE85B7A), // Soft maroon/pink
       badgeTextColor: Colors.white,
       isUnread: false,
+      englishBody:
+          'Attention,\n\nYour Qatar ID (QID) is expiring in 30 days. Please ensure timely renewal with HR and submit updated documents to avoid any penalties.',
+      arabicBody:
+          'تنبيه،\n\nبطاقة الشخصية (QID) الخاصة بك ستنتهي خلال 30 يوماً. يرجى تجديدها وتحديث المستندات لدى الموارد البشرية لتفادي أي غرامات.',
+      extraDetails: {
+        'Document Type': 'Qatar ID (QID)',
+        'Expiry Date': '28-Feb-2025',
+        'Status': 'Expiring Soon (30 Days Left)',
+      },
+      attachmentName: 'QID_Renewal_Guidelines.pdf',
     ),
   ];
 
@@ -126,7 +187,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       const SizedBox(height: 14),
                   itemBuilder: (context, index) {
                     final item = _notifications[index];
-                    return _buildNotificationCard(item);
+                    return GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                NotificationDetailScreen(item: item),
+                          ),
+                        );
+                      },
+                      child: _buildNotificationCard(item),
+                    );
                   },
                 ),
               ),
