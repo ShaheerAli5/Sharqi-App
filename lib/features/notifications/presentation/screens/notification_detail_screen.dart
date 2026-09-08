@@ -11,6 +11,23 @@ class NotificationDetailScreen extends StatelessWidget {
     required this.item,
   });
 
+  String _cleanHtml(String text) {
+    if (text.isEmpty) return '';
+    String cleaned = text
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n')
+        .replaceAll(RegExp(r'</div>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'");
+
+    return cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(
@@ -33,9 +50,9 @@ class NotificationDetailScreen extends StatelessWidget {
             child: Container(
               width: double.infinity,
               decoration: const BoxDecoration(
-                color: Color(0xFFFBF6F3), // Exact Hex: #FBF6F3
+                color: Color(0xFFFBF6F3),
                 borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(24), // 24px top radius
+                  top: Radius.circular(24),
                 ),
               ),
               child: SingleChildScrollView(
@@ -58,6 +75,17 @@ class NotificationDetailScreen extends StatelessWidget {
   }
 
   Widget _buildDetailCard(BuildContext context) {
+    final rawText = item.englishBody ?? item.description;
+    final cleanedFullText = _cleanHtml(rawText);
+
+    // Check if text is separated into English & Arabic using '---'
+    List<String> parts = cleanedFullText.split(RegExp(r'\n?\s*---\s*\n?'));
+    String englishText = parts.isNotEmpty ? parts[0].trim() : cleanedFullText;
+    String? inlineArabicText = parts.length > 1 ? parts.sublist(1).join('\n\n').trim() : null;
+    final arabicText = (inlineArabicText != null && inlineArabicText.isNotEmpty)
+        ? inlineArabicText
+        : (_cleanHtml(item.arabicBody ?? '').isNotEmpty ? _cleanHtml(item.arabicBody!) : null);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20.0),
@@ -119,18 +147,19 @@ class NotificationDetailScreen extends StatelessWidget {
           const SizedBox(height: 18),
 
           // English Body Text
-          Text(
-            item.englishBody ?? item.description,
-            style: const TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 13.5,
-              fontWeight: FontWeight.w400,
-              color: Color(0xFF1A1310),
-              height: 1.5,
+          if (englishText.isNotEmpty)
+            Text(
+              englishText,
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                color: Color(0xFF1A1310),
+                height: 1.55,
+              ),
             ),
-          ),
 
-          // Extra structured details if present (e.g., Leave/Salary/Shift info)
+          // Structured details if present
           if (item.extraDetails != null && item.extraDetails!.isNotEmpty) ...[
             const SizedBox(height: 16),
             const Divider(color: Color(0xFFEEEEEE), thickness: 1),
@@ -169,21 +198,24 @@ class NotificationDetailScreen extends StatelessWidget {
           ],
 
           // Arabic Body Text if present
-          if (item.arabicBody != null && item.arabicBody!.isNotEmpty) ...[
+          if (arabicText != null && arabicText.isNotEmpty) ...[
             const SizedBox(height: 16),
             const Divider(color: Color(0xFFEEEEEE), thickness: 1),
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerRight,
-              child: Text(
-                item.arabicBody!,
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w400,
-                  color: Color(0xFF1A1310),
-                  height: 1.6,
+              child: Directionality(
+                textDirection: TextDirection.rtl,
+                child: Text(
+                  arabicText,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: Color(0xFF1A1310),
+                    height: 1.6,
+                  ),
                 ),
               ),
             ),
@@ -206,7 +238,7 @@ class NotificationDetailScreen extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF9ECEF), // Light pinkish tint
+                  color: const Color(0xFFF9ECEF),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: const Color(0xFFC6134B).withValues(alpha: 0.15),
@@ -214,7 +246,6 @@ class NotificationDetailScreen extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    // PDF Icon Box
                     Container(
                       width: 40,
                       height: 40,
@@ -235,7 +266,6 @@ class NotificationDetailScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 14),
-                    // Attachment Info
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -280,7 +310,6 @@ class NotificationDetailScreen extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context) {
-    // Format title to uppercase for header
     final headerTitle = item.title.toUpperCase();
 
     return Container(
@@ -305,7 +334,6 @@ class NotificationDetailScreen extends StatelessWidget {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Back Button
               Align(
                 alignment: Alignment.centerLeft,
                 child: GestureDetector(
@@ -326,8 +354,6 @@ class NotificationDetailScreen extends StatelessWidget {
                   ),
                 ),
               ),
-
-              // Title Text
               SizedBox(
                 height: 15,
                 child: Center(

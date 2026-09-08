@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/services/auth_repository.dart';
+import '../../../../core/services/storage_service.dart';
 import '../../../../routes/app_routes.dart';
 import '../../../splash/presentation/widgets/al_sharqi_logo.dart';
 
@@ -15,12 +17,14 @@ class VerificationScreen extends StatefulWidget {
 
 class _VerificationScreenState extends State<VerificationScreen> {
   final List<TextEditingController> _otpControllers =
-      List.generate(6, (_) => TextEditingController());
-  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+      List.generate(4, (_) => TextEditingController());
+  final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
+  final AuthRepository _authRepository = AuthRepository();
 
   Timer? _timer;
   int _secondsRemaining = 19;
   bool _canResend = false;
+  bool _isVerifying = false;
 
   @override
   void initState() {
@@ -62,7 +66,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
 
   void _onOtpChanged(int index, String value) {
     if (value.isNotEmpty) {
-      if (index < 5) {
+      if (index < 3) {
         _focusNodes[index + 1].requestFocus();
       } else {
         _focusNodes[index].unfocus();
@@ -75,20 +79,67 @@ class _VerificationScreenState extends State<VerificationScreen> {
     setState(() {});
   }
 
-  void _onVerify() {
+  Future<void> _onVerify() async {
     final otpCode = _otpControllers.map((c) => c.text).join();
-    if (otpCode.length < 6) {
+    if (otpCode.length < 4) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter the full 6-digit code')),
+        const SnackBar(content: Text('Please enter the full 4-digit code')),
       );
       return;
     }
 
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRoutes.home,
-      (route) => false,
-    );
+    final empNumber = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+
+    setState(() => _isVerifying = true);
+
+    try {
+      final result = await _authRepository.verifyOTP(
+        employeeNumber: empNumber,
+        companyId: companyId,
+        otp: otpCode,
+        deviceToken: StorageService.getValue(StorageService.keyDeviceId),
+      );
+
+      if (result.isSuccess) {
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRoutes.home,
+            (route) => false,
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.error ?? 'Invalid OTP. Please try again.'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Verification error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isVerifying = false);
+      }
+    }
+  }
+
+  Future<void> _resendCode() async {
+    _startTimer();
+    try {
+      final empNumber = StorageService.getValue(StorageService.keyEmpNo);
+      final companyId = StorageService.getValue(StorageService.keyCompanyId);
+      if (empNumber.isNotEmpty && companyId.isNotEmpty) {
+        await _authRepository.sendOTP(empNumber, companyId);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -101,19 +152,23 @@ class _VerificationScreenState extends State<VerificationScreen> {
       ),
     );
 
-    const double headerHeight = 264.0; // Header height
+    const double headerHeight = 264.0;
     const double cardTopOffset = 250.0;
     const double badgeHeight = 29.0;
-    const double badgeTopOffset = cardTopOffset - (badgeHeight / 2); // 235.5px
+    const double badgeTopOffset = cardTopOffset - (badgeHeight / 2);
 
     final formattedTimer =
         '00:${_secondsRemaining.toString().padLeft(2, '0')}';
+
+    final savedPhone = StorageService.getValue(StorageService.keyPhone);
+    final phoneEnding = savedPhone.length >= 4
+        ? '${savedPhone.substring(savedPhone.length - 4)}.'
+        : AppStrings.defaultPhoneEnding;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // 1. Layer 1: Top Gradient Header with Back Button & 160px x 160px Logo
           Align(
             alignment: Alignment.topCenter,
             child: Container(
@@ -135,7 +190,6 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 bottom: false,
                 child: Stack(
                   children: [
-                    // Back Chevron Button (Top Left)
                     Positioned(
                       top: 12,
                       left: 16,
@@ -156,14 +210,12 @@ class _VerificationScreenState extends State<VerificationScreen> {
                         ),
                       ),
                     ),
-
-                    // Centered Al Sharqi Holding Logo (Exact Figma Layout: 160px x 160px)
                     const Center(
                       child: Padding(
                         padding: EdgeInsets.only(bottom: 16.0),
                         child: AlSharqiLogo(
-                          width: 160, // Exact Figma Width: 160px
-                          height: 160, // Exact Figma Height: 160px
+                          width: 160,
+                          height: 160,
                         ),
                       ),
                     ),
@@ -172,15 +224,13 @@ class _VerificationScreenState extends State<VerificationScreen> {
               ),
             ),
           ),
-
-          // 2. Layer 2: Cream Body Card Container (Fills rest of screen)
           Positioned.fill(
             top: cardTopOffset,
             child: Container(
               decoration: const BoxDecoration(
-                color: AppColors.background, // Exact Figma #FBF6F3
+                color: AppColors.background,
                 borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(24), // Radius: 24px
+                  top: Radius.circular(24),
                 ),
               ),
               child: SingleChildScrollView(
@@ -189,37 +239,34 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Frame 28: Title & Subtitle Block (Fill 354px x Hug 91px, Gap: 16px)
                     Text(
                       AppStrings.checkYourPhone,
                       style: const TextStyle(
-                        fontSize: 20, // Exact Figma Size: 20px
-                        fontWeight: FontWeight.w600, // Exact Figma Weight: 600 SemiBold
-                        letterSpacing: -0.2, // Exact Figma Letter Spacing: -0.2px
-                        color: Color(0xFF1A1310), // Exact Figma Hex Color: #1A1310
-                        height: 1.0, // Exact Figma Line Height: 100%
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.2,
+                        color: Color(0xFF1A1310),
+                        height: 1.0,
                       ),
                     ),
-                    const SizedBox(height: 16), // Exact Figma Gap: 16px
-
-                    // Subtitle (354px x 50px, Size: 16px, LineHeight: 24.8px)
+                    const SizedBox(height: 16),
                     Text.rich(
                       TextSpan(
                         children: [
                           const TextSpan(
                             text: AppStrings.checkPhoneSubtitlePrefix,
                             style: TextStyle(
-                              fontSize: 16, // Exact Figma Size: 16px
-                              fontWeight: FontWeight.w400, // Exact Figma Weight: 400 Regular
+                              fontSize: 16,
+                              fontWeight: FontWeight.w400,
                               color: AppColors.textSecondary,
-                              height: 1.55, // Line height 24.8px / 16px = 1.55
+                              height: 1.55,
                             ),
                           ),
                           TextSpan(
-                            text: AppStrings.defaultPhoneEnding,
+                            text: phoneEnding,
                             style: const TextStyle(
-                              fontSize: 16, // Exact Figma Size: 16px
-                              fontWeight: FontWeight.w600, // Exact Figma Weight: 600 SemiBold
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
                               color: AppColors.textPrimary,
                               height: 1.55,
                             ),
@@ -227,10 +274,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // Frame 27: Verification Code Block (Fill 354px x Hug 98px, Gap: 16px)
                     Text(
                       AppStrings.verificationCodeLabel,
                       style: const TextStyle(
@@ -239,15 +283,14 @@ class _VerificationScreenState extends State<VerificationScreen> {
                         color: AppColors.labelText,
                       ),
                     ),
-                    const SizedBox(height: 10),
-
-                    // 6 OTP Input Boxes
+                    const SizedBox(height: 12),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: List.generate(6, (index) {
-                        return SizedBox(
-                          width: 48,
-                          height: 52,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(4, (index) {
+                        return Container(
+                          width: 58,
+                          height: 58,
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
                           child: TextFormField(
                             controller: _otpControllers[index],
                             focusNode: _focusNodes[index],
@@ -255,7 +298,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                             textAlign: TextAlign.center,
                             maxLength: 1,
                             style: const TextStyle(
-                              fontSize: 20,
+                              fontSize: 22,
                               fontWeight: FontWeight.bold,
                               color: AppColors.textPrimary,
                             ),
@@ -287,14 +330,11 @@ class _VerificationScreenState extends State<VerificationScreen> {
                         );
                       }),
                     ),
-
-                    const SizedBox(height: 16), // Exact Figma Gap: 16px
-
-                    // Resend Timer Row
+                    const SizedBox(height: 20),
                     Center(
                       child: _canResend
                           ? GestureDetector(
-                              onTap: _startTimer,
+                              onTap: _resendCode,
                               child: const Text(
                                 AppStrings.resendCode,
                                 style: TextStyle(
@@ -327,58 +367,61 @@ class _VerificationScreenState extends State<VerificationScreen> {
                               ),
                             ),
                     ),
-
                     const SizedBox(height: 28),
-
-                    // button.btn-primary: Verify and Continue Button (354px x 48px, Radii: TL 26, TR 26, BR 26, BL 6)
                     SizedBox(
                       width: double.infinity,
-                      height: 48, // Exact Figma Height: 48px
+                      height: 48,
                       child: ElevatedButton(
-                        onPressed: _onVerify,
+                        onPressed: _isVerifying ? null : _onVerify,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary, // #C6134B
+                          backgroundColor: AppColors.primary,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(
                             vertical: 1,
                             horizontal: 6,
-                          ), // Exact Figma Padding Top 1, Right 6, Bottom 1, Left 6
+                          ),
                           shape: const RoundedRectangleBorder(
                             borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(26), // Exact Figma TL 26px
-                              topRight: Radius.circular(26), // Exact Figma TR 26px
-                              bottomRight: Radius.circular(26), // Exact Figma BR 26px
-                              bottomLeft: Radius.circular(6), // Exact Figma BL 6px
+                              topLeft: Radius.circular(26),
+                              topRight: Radius.circular(26),
+                              bottomRight: Radius.circular(26),
+                              bottomLeft: Radius.circular(6),
                             ),
                           ),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              AppStrings.verifyAndContinue,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16, // Exact Figma Size: 16px
-                                fontWeight: FontWeight.w400, // Exact Figma Weight: 400
-                                letterSpacing: 0.16, // Exact Figma Letter Spacing: 0.16px
-                                height: 1.0, // Exact Figma Line Height: 100%
+                        child: _isVerifying
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    AppStrings.verifyAndContinue,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w400,
+                                      letterSpacing: 0.16,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Icon(
+                                    Icons.arrow_forward_rounded,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ],
                               ),
-                            ),
-                            const SizedBox(width: 8), // Exact Figma Gap: 8px
-                            const Icon(
-                              Icons.arrow_forward_rounded,
-                              color: Colors.white,
-                              size: 16, // Exact Figma Icon Size: 16px
-                            ),
-                          ],
-                        ),
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // div.trust: Encryption Notice (Fill 354px x Hug 15px, Gap: 8px)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -387,7 +430,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                           size: 16,
                           color: const Color(0xFF10B981).withValues(alpha: 0.9),
                         ),
-                        const SizedBox(width: 8), // Exact Figma Gap: 8px
+                        const SizedBox(width: 8),
                         Text(
                           AppStrings.sessionEncryptedNotice,
                           style: const TextStyle(
@@ -403,33 +446,31 @@ class _VerificationScreenState extends State<VerificationScreen> {
               ),
             ),
           ),
-
-          // 3. Layer 3: Floating Pill Badge (div.eyebrow - 163px x 29px, Radius: 999px)
           Positioned(
             top: badgeTopOffset,
             left: 0,
             right: 0,
             child: Center(
               child: Container(
-                height: badgeHeight, // Exact 29px
+                height: badgeHeight,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 18,
                   vertical: 8,
-                ), // Exact Figma Padding: Top/Bottom 8px, Left/Right 18px
+                ),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999), // Exact Figma 999px Radius
+                  borderRadius: BorderRadius.circular(999),
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      const Color(0xFFC6134B).withAlpha(153), // Exact 60% opacity
-                      const Color(0xFF7A0E33).withAlpha(153), // Exact 60% opacity
-                      const Color(0xFFC6134B).withAlpha(153), // Exact 60% opacity
+                      const Color(0xFFC6134B).withAlpha(153),
+                      const Color(0xFF7A0E33).withAlpha(153),
+                      const Color(0xFFC6134B).withAlpha(153),
                     ],
                     stops: const [0.0, 0.5, 1.0],
                   ),
                   border: Border.all(
-                    color: Colors.white.withAlpha(51), // Glassmorphism outline
+                    color: Colors.white.withAlpha(51),
                     width: 0.8,
                   ),
                 ),

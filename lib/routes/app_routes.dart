@@ -37,21 +37,21 @@ class AppRoutes {
   static const String notifications = '/notifications';
 
   static Map<String, WidgetBuilder> get routes => {
-        splash: (context) => const SplashScreen(),
-        signIn: (context) => const SignInScreen(),
-        verification: (context) => const VerificationScreen(),
-        home: (context) => const HomeScreen(),
-        dashboard: (context) => const DashboardScreen(),
-        selfServiceWeb: (context) => const SelfServicePortalScreen(),
-        complaintForm: (context) => const ComplaintFormScreen(),
-        trackCase: (context) => const TrackCaseScreen(),
-        employeeRequestForm: (context) => const EmployeeRequestFormScreen(),
-        leaveRequestForm: (context) => const LeaveRequestFormScreen(),
-        brightIdeaForm: (context) => const BrightIdeaFormScreen(),
-        recordTimeIn: (context) => const RecordTimeInScreen(),
-        recordTimeOut: (context) => const RecordTimeOutScreen(),
-        attendanceList: (context) => const AttendanceListScreen(),
-        workPlan: (context) => const WorkPlanScreen(),
-        notifications: (context) => const NotificationsScreen(),
-      };
+    splash: (context) => const SplashScreen(),
+    signIn: (context) => const SignInScreen(),
+    verification: (context) => const VerificationScreen(),
+    home: (context) => const HomeScreen(),
+    dashboard: (context) => const DashboardScreen(),
+    selfServiceWeb: (context) => const SelfServicePortalScreen(),
+    complaintForm: (context) => const ComplaintFormScreen(),
+    trackCase: (context) => const TrackCaseScreen(),
+    employeeRequestForm: (context) => const EmployeeRequestFormScreen(),
+    leaveRequestForm: (context) => const LeaveRequestFormScreen(),
+    brightIdeaForm: (context) => const BrightIdeaFormScreen(),
+    recordTimeIn: (context) => const RecordTimeInScreen(),
+    recordTimeOut: (context) => const RecordTimeOutScreen(),
+    attendanceList: (context) => const AttendanceListScreen(),
+    workPlan: (context) => const WorkPlanScreen(),
+    notifications: (context) => const NotificationsScreen(),
+  };
 }

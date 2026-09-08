@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/services/attendance_repository.dart';
 import '../../../dashboard/presentation/widgets/app_drawer.dart';
 import 'notification_detail_screen.dart';
 
@@ -43,109 +44,67 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final AttendanceRepository _attendanceRepository = AttendanceRepository();
 
-  final List<NotificationItem> _notifications = const [
-    NotificationItem(
-      id: '1',
-      title: 'CMS Memo Update',
-      description:
-          'Please be informed that the memo has been updated. Kindly note that all requests must be submitted through the CMS.',
-      date: '23-Feb-2025 07:35 AM',
-      badgeText: 'Attention - CMS',
-      badgeBgColor: Color(0xFFC6134B), // Solid Maroon/Red
-      badgeTextColor: Colors.white,
-      isUnread: true,
-      englishBody:
-          'Dear Team,\n\nPlease be informed that the memo has been updated. Kindly note that all requests must be submitted through the CMS.\n\nThank you.',
-      arabicBody:
-          'الفريق العزيز،\n\nيرجى العلم بأنه تم تحديث المذكرة. نرجو أخذ العلم بأن جميع الطلبات يجب تقديمها عبر نظام إدارة المحتوى (CMS).\n\nشكراً لكم.',
-      attachmentName: 'CMS_Memo_2025_Update.pdf',
-    ),
-    NotificationItem(
-      id: '2',
-      title: 'Leave Request Approved',
-      description:
-          'Your annual leave request from 12 Jul to 18 Jul has been approved by your duty manager.',
-      date: '20-Feb-2025 09:12 AM',
-      badgeText: 'HR Update',
-      badgeBgColor: Color(0xFFE2F7EB), // Soft green
-      badgeTextColor: Color(0xFF1E854A), // Green text
-      isUnread: true,
-      englishBody:
-          'Dear Employee,\n\nYour annual leave request has been officially approved by your department manager.\n\nEnjoy your time off and have a safe trip!',
-      arabicBody:
-          'عزيزي الموظف،\n\nتم اعتماد طلب الإجازة السنوية الخاص بك رسمياً من قبل مدير القسم.\n\nنتمنى لك إجازة سعيدة!',
-      extraDetails: {
-        'Leave Type': 'Annual Leave',
-        'Duration': '12 Jul 2025 - 18 Jul 2025 (7 Days)',
-        'Approved By': 'Duty Manager (Ahmed Al-Mansoori)',
-      },
-      attachmentName: 'Leave_Approval_Certificate.pdf',
-    ),
-    NotificationItem(
-      id: '3',
-      title: 'Salary Slip Available',
-      description:
-          'Your salary slip for January 2025 is now available for download.',
-      date: '05-Feb-2025 03:40 PM',
-      badgeText: 'Payroll',
-      badgeBgColor: Color(0xFFFDEED9), // Soft tan/amber
-      badgeTextColor: Color(0xFF8A5A10), // Brown text
-      isUnread: false,
-      englishBody:
-          'Dear Employee,\n\nYour salary slip for the month of January 2025 has been successfully processed and is now available for secure review and download.',
-      arabicBody:
-          'عزيزي الموظف،\n\nقسيمة راتب شهر يناير 2025 جاهزة الآن للاطلاع والتحميل الآمن.',
-      extraDetails: {
-        'Pay Period': 'January 2025',
-        'Net Pay': 'QAR 12,500.00',
-        'Payment Date': '28-Jan-2025',
-      },
-      attachmentName: 'Salary_Slip_Jan_2025.pdf',
-    ),
-    NotificationItem(
-      id: '4',
-      title: 'Shift Schedule Updated',
-      description:
-          'Your work schedule at Ritz Carlton Hotel has been revised for next week.',
-      date: '02-Feb-2025 11:05 AM',
-      badgeText: 'Work Plan',
-      badgeBgColor: Color(0xFFEFECE8), // Soft grey
-      badgeTextColor: Color(0xFF666666), // Grey text
-      isUnread: false,
-      englishBody:
-          'Dear Staff,\n\nYour work roster at Ritz Carlton Hotel has been updated for the upcoming week. Please review your shift timings below.',
-      arabicBody:
-          'عزيزي الموظف،\n\nتم تحديث جدول مناوباتك في فندق ريتز كارلتون للأسبوع القادم. يرجى مراجعة المواعيد أدناه.',
-      extraDetails: {
-        'Location': 'Ritz Carlton Hotel, Doha',
-        'Shift Time': '08:00 AM - 04:00 PM (Morning Shift)',
-        'Effective Dates': '03 Feb 2025 - 09 Feb 2025',
-      },
-      attachmentName: 'Shift_Schedule_Feb_W1.pdf',
-    ),
-    NotificationItem(
-      id: '5',
-      title: 'QID Expiry Reminder',
-      description:
-          'Your Qatar ID is set to expire in 30 days. Please renew and update your documents.',
-      date: '28-Jan-2025 08:00 AM',
-      badgeText: 'Action Required',
-      badgeBgColor: Color(0xFFE85B7A), // Soft maroon/pink
-      badgeTextColor: Colors.white,
-      isUnread: false,
-      englishBody:
-          'Attention,\n\nYour Qatar ID (QID) is expiring in 30 days. Please ensure timely renewal with HR and submit updated documents to avoid any penalties.',
-      arabicBody:
-          'تنبيه،\n\nبطاقة الشخصية (QID) الخاصة بك ستنتهي خلال 30 يوماً. يرجى تجديدها وتحديث المستندات لدى الموارد البشرية لتفادي أي غرامات.',
-      extraDetails: {
-        'Document Type': 'Qatar ID (QID)',
-        'Expiry Date': '28-Feb-2025',
-        'Status': 'Expiring Soon (30 Days Left)',
-      },
-      attachmentName: 'QID_Renewal_Guidelines.pdf',
-    ),
-  ];
+  bool _isLoading = true;
+  List<NotificationItem> _notifications = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchNotifications();
+  }
+
+  String _cleanHtml(String text) {
+    if (text.isEmpty) return '';
+    String cleaned = text
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n')
+        .replaceAll(RegExp(r'</div>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'");
+
+    return cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+  }
+
+  Future<void> _fetchNotifications() async {
+    setState(() => _isLoading = true);
+    try {
+      final list = await _attendanceRepository.getNotifications();
+      List<NotificationItem> fetched = [];
+      for (var item in list) {
+        final title = item.subject.isNotEmpty ? item.subject : 'Notification';
+        final desc = _cleanHtml(item.message);
+        final date = item.timestamp;
+        final tag = item.notificationTag.isNotEmpty ? item.notificationTag : 'Notification';
+        fetched.add(NotificationItem(
+          id: item.notificationId.toString(),
+          title: title,
+          description: desc,
+          date: date,
+          badgeText: tag,
+          badgeBgColor: const Color(0xFFC6134B),
+          badgeTextColor: Colors.white,
+          isUnread: item.state != 'read',
+          englishBody: desc,
+        ));
+      }
+      setState(() {
+        _notifications = fetched;
+      });
+    } catch (_) {
+      setState(() => _notifications = []);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -179,12 +138,33 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.all(20.0), // Exact Padding: 20px
-                child: ListView.separated(
+                child: _isLoading
+                    ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(40.0),
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  ),
+                )
+                    : _notifications.isEmpty
+                    ? const Padding(
+                  padding: EdgeInsets.all(40.0),
+                  child: Center(
+                    child: Text(
+                      'No notifications found',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 14,
+                        color: Color(0xFF888888),
+                      ),
+                    ),
+                  ),
+                )
+                    : ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _notifications.length,
                   separatorBuilder: (context, index) =>
-                      const SizedBox(height: 14),
+                  const SizedBox(height: 14),
                   itemBuilder: (context, index) {
                     final item = _notifications[index];
                     return GestureDetector(
@@ -210,6 +190,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _buildNotificationCard(NotificationItem item) {
+    final cleanDesc = _cleanHtml(item.description);
+    final previewText = cleanDesc.contains('---')
+        ? cleanDesc.split('---')[0].trim()
+        : cleanDesc;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16.0), // Exact Padding: 16px
@@ -291,7 +276,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
           // Description Text
           Text(
-            item.description,
+            previewText,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontFamily: 'Outfit',
               fontSize: 12.5,

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/services/auth_repository.dart';
+import '../../../../core/services/storage_service.dart';
 import '../../../../routes/app_routes.dart';
 import '../../../splash/presentation/widgets/al_sharqi_logo.dart';
 
@@ -14,15 +16,43 @@ class SignInScreen extends StatefulWidget {
 
 class _SignInScreenState extends State<SignInScreen> {
   final TextEditingController _employeeNumberController = TextEditingController();
-  String? _selectedCompany;
+  final AuthRepository _authRepository = AuthRepository();
 
-  final List<String> _companies = [
-    'Al Sharqi Holding',
-    'Al Sharqi Shipping & Logistics',
-    'Al Sharqi Trading',
-    'Al Sharqi Real Estate',
-    'Al Sharqi Services',
-  ];
+  List<dynamic> _companies = [];
+  dynamic _selectedCompany;
+  bool _isLoadingCompanies = false;
+  bool _isSendingOtp = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCompanies();
+  }
+
+  Future<void> _fetchCompanies() async {
+    setState(() => _isLoadingCompanies = true);
+    try {
+      final list = await _authRepository.getCompanyList();
+      if (mounted) {
+        setState(() {
+          _companies = list;
+          if (_companies.isNotEmpty) {
+            _selectedCompany = _companies.first;
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load company list: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingCompanies = false);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -69,37 +99,40 @@ class _SignInScreenState extends State<SignInScreen> {
                 ),
                 const SizedBox(height: 12),
                 Flexible(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: _companies.length,
-                    separatorBuilder: (context, index) => const Divider(
-                      height: 1,
-                      color: AppColors.divider,
-                    ),
-                    itemBuilder: (context, index) {
-                      final company = _companies[index];
-                      final isSelected = company == _selectedCompany;
-                      return ListTile(
-                        title: Text(
-                          company,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                  child: _isLoadingCompanies
+                      ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: _companies.length,
+                          separatorBuilder: (context, index) => const Divider(
+                            height: 1,
+                            color: AppColors.divider,
                           ),
+                          itemBuilder: (context, index) {
+                            final company = _companies[index];
+                            final companyName = company['name'] ?? company.toString();
+                            final isSelected = company == _selectedCompany;
+                            return ListTile(
+                              title: Text(
+                                companyName,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                                ),
+                              ),
+                              trailing: isSelected
+                                  ? const Icon(Icons.check_circle, color: AppColors.primary)
+                                  : null,
+                              onTap: () {
+                                setState(() {
+                                  _selectedCompany = company;
+                                });
+                                Navigator.pop(context);
+                              },
+                            );
+                          },
                         ),
-                        trailing: isSelected
-                            ? const Icon(Icons.check_circle, color: AppColors.primary)
-                            : null,
-                        onTap: () {
-                          setState(() {
-                            _selectedCompany = company;
-                          });
-                          Navigator.pop(context);
-                        },
-                      );
-                    },
-                  ),
                 ),
               ],
             ),
@@ -109,21 +142,59 @@ class _SignInScreenState extends State<SignInScreen> {
     );
   }
 
-  void _onSendVerification() {
+  Future<void> _onSendVerification() async {
     if (_selectedCompany == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a company name')),
       );
       return;
     }
-    if (_employeeNumberController.text.trim().isEmpty) {
+    final empNumber = _employeeNumberController.text.trim();
+    if (empNumber.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter your employee number')),
       );
       return;
     }
 
-    Navigator.pushNamed(context, AppRoutes.verification);
+    final companyId = (_selectedCompany['id'] ?? '').toString();
+    final companyName = (_selectedCompany['name'] ?? '').toString();
+
+    await StorageService.addValue(StorageService.keyCompanyId, companyId);
+    await StorageService.addValue(StorageService.keyCompanyName, companyName);
+    await StorageService.addValue(StorageService.keyEmpNo, empNumber);
+
+    setState(() => _isSendingOtp = true);
+    try {
+      final otpRes = await _authRepository.sendOTP(empNumber, companyId);
+      if (otpRes.isSuccess) {
+        if (mounted) {
+          Navigator.pushNamed(context, AppRoutes.verification);
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(otpRes.error ?? 'Employee number not registered for this company.'),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send verification code: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSendingOtp = false);
+      }
+    }
   }
 
   @override
@@ -139,13 +210,16 @@ class _SignInScreenState extends State<SignInScreen> {
     const double headerHeight = 250.0;
     const double cardTopOffset = 236.0;
     const double badgeHeight = 29.0;
-    const double badgeTopOffset = cardTopOffset - (badgeHeight / 2); // 221.5px
+    const double badgeTopOffset = cardTopOffset - (badgeHeight / 2);
+
+    final selectedCompanyName = _selectedCompany != null
+        ? (_selectedCompany['name'] ?? _selectedCompany.toString())
+        : AppStrings.selectCompanyNameHint;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // 1. Layer 1: Top Gradient Header
           Align(
             alignment: Alignment.topCenter,
             child: Container(
@@ -177,13 +251,11 @@ class _SignInScreenState extends State<SignInScreen> {
               ),
             ),
           ),
-
-          // 2. Layer 2: Cream Body Card Container (Fills rest of screen below header)
           Positioned.fill(
             top: cardTopOffset,
             child: Container(
               decoration: const BoxDecoration(
-                color: AppColors.background, // Exact Figma #FBF6F3
+                color: AppColors.background,
                 borderRadius: BorderRadius.vertical(
                   top: Radius.circular(24),
                 ),
@@ -194,7 +266,6 @@ class _SignInScreenState extends State<SignInScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Welcome Back Title & Subtitle Block
                     Text(
                       AppStrings.welcomeBack,
                       style: const TextStyle(
@@ -214,10 +285,7 @@ class _SignInScreenState extends State<SignInScreen> {
                         height: 1.4,
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // Company Name Field
                     Text(
                       AppStrings.companyNameLabel,
                       style: const TextStyle(
@@ -245,7 +313,7 @@ class _SignInScreenState extends State<SignInScreen> {
                           children: [
                             Expanded(
                               child: Text(
-                                _selectedCompany ?? AppStrings.selectCompanyNameHint,
+                                selectedCompanyName,
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: _selectedCompany != null
@@ -265,10 +333,7 @@ class _SignInScreenState extends State<SignInScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 16),
-
-                    // Employee Number Field
                     Text(
                       AppStrings.employeeNumberLabel,
                       style: const TextStyle(
@@ -313,15 +378,12 @@ class _SignInScreenState extends State<SignInScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // Send Verification Code Button (354px x 48px)
                     SizedBox(
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: _onSendVerification,
+                        onPressed: _isSendingOtp ? null : _onSendVerification,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           elevation: 0,
@@ -338,42 +400,42 @@ class _SignInScreenState extends State<SignInScreen> {
                             ),
                           ),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              AppStrings.sendVerificationCode,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w400,
-                                letterSpacing: 0.16,
-                                height: 1.0,
+                        child: _isSendingOtp
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    AppStrings.sendVerificationCode,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w400,
+                                      letterSpacing: 0.16,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Icon(
+                                    Icons.arrow_forward_rounded,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ],
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.arrow_forward_rounded,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                          ],
-                        ),
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // Contact HR Support Link
                     Center(
                       child: GestureDetector(
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Contacting HR Support...'),
-                            ),
-                          );
-                        },
+                        onTap: () {},
                         child: Text.rich(
                           TextSpan(
                             children: [
@@ -403,8 +465,6 @@ class _SignInScreenState extends State<SignInScreen> {
               ),
             ),
           ),
-
-          // 3. Layer 3: Floating Pill Badge (STEP 1 OF 2 — SIGN IN)
           Positioned(
             top: badgeTopOffset,
             left: 0,

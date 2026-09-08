@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/services/storage_service.dart';
 import '../../../../routes/app_routes.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -191,12 +192,12 @@ class AppDrawer extends StatelessWidget {
                             Navigator.pushNamedAndRemoveUntil(
                               context,
                               AppRoutes.signIn,
-                              (route) => false,
+                                  (route) => false,
                             );
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor:
-                                const Color(0xFFC6134B).withValues(alpha: 0.08),
+                            const Color(0xFFC6134B).withValues(alpha: 0.08),
                             elevation: 0,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 1),
@@ -243,6 +244,12 @@ class AppDrawer extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final fullName = StorageService.getValue(StorageService.keyFullName);
+    final phone = StorageService.getValue(StorageService.keyPhone);
+    final whatsapp = StorageService.getValue(StorageService.keyWhatsAppData);
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyName = StorageService.getValue(StorageService.keyCompanyName);
+
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
@@ -313,9 +320,9 @@ class AppDrawer extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          AppStrings.drawerNameShort,
-                          style: TextStyle(
+                        Text(
+                          fullName.isNotEmpty ? fullName : 'Employee',
+                          style: const TextStyle(
                             fontFamily: 'Outfit',
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -329,69 +336,71 @@ class AppDrawer extends StatelessWidget {
                         Row(
                           children: [
                             // Phone Chip
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: const [
-                                  Icon(
-                                    Icons.phone_outlined,
-                                    size: 11,
-                                    color: Colors.white,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    AppStrings.phoneNumber,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
+                            if (phone.isNotEmpty) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.phone_outlined,
+                                      size: 11,
                                       color: Colors.white,
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      phone,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-
-                            const SizedBox(width: 6),
+                              const SizedBox(width: 6),
+                            ],
 
                             // WhatsApp Chip
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF25D366)
-                                    .withValues(alpha: 0.85),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: const [
-                                  Icon(
-                                    Icons.chat_bubble_rounded,
-                                    size: 11,
-                                    color: Colors.white,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    AppStrings.whatsappNumber,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
+                            if (whatsapp.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF25D366)
+                                      .withValues(alpha: 0.85),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.chat_bubble_rounded,
+                                      size: 11,
                                       color: Colors.white,
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      whatsapp,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ],
@@ -402,51 +411,53 @@ class AppDrawer extends StatelessWidget {
 
               const SizedBox(height: 12),
 
-              // span.phone-chip: EMP# 2225 Badge Pill
-              Container(
-                height: 25,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: const Text(
-                  AppStrings.employeeId,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                    height: 1.0,
+              // EMP# Badge Pill
+              if (empNo.isNotEmpty) ...[
+                Container(
+                  height: 25,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    'EMP# $empNo',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      height: 1.0,
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(height: 8),
+              ],
 
-              const SizedBox(height: 8),
-
-              // span.company-chip: Mr. VALET Parking Solutions Pill
-              Container(
-                height: 25,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFC6134B),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: const Text(
-                  AppStrings.companySolutionsValue,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                    height: 1.0,
+              // Company Name Pill
+              if (companyName.isNotEmpty)
+                Container(
+                  height: 25,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFC6134B),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    companyName,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      height: 1.0,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ),
@@ -472,9 +483,9 @@ class _DrawerMenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final backgroundColor =
-        isSelected ? const Color(0xFFFBE7EE) : Colors.transparent;
+    isSelected ? const Color(0xFFFBE7EE) : Colors.transparent;
     final textColor =
-        isSelected ? const Color(0xFFC6134B) : const Color(0xFF1A1310);
+    isSelected ? const Color(0xFFC6134B) : const Color(0xFF1A1310);
 
     return GestureDetector(
       onTap: onTap,

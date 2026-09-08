@@ -22,7 +22,7 @@ class AppStrings {
   static const String stepVerifyBadge = 'STEP 2 OF 2 — VERIFY';
   static const String checkYourPhone = 'Check your phone';
   static const String checkPhoneSubtitlePrefix =
-      'Enter the 6-digit code sent to the mobile number ending in ';
+      'Enter the 4-digit code sent to the mobile number ending in ';
   static const String defaultPhoneEnding = '8575.';
   static const String verificationCodeLabel = 'Verification code';
   static const String didntGetItResendIn = "Didn't get it? Resend in ";

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/services/auth_repository.dart';
+import '../../../../core/services/storage_service.dart';
 
 class BrightIdeaFormScreen extends StatefulWidget {
   const BrightIdeaFormScreen({super.key});
@@ -13,9 +15,9 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
   final _formKey = GlobalKey<FormState>();
 
   // Form Fields State
-  String _selectedCompany = 'Bike Riders';
+  String _selectedCompany = '';
   final TextEditingController _employeeNoController =
-      TextEditingController(text: '20481');
+      TextEditingController();
   final TextEditingController _employeeNameController =
       TextEditingController();
   final TextEditingController _employeeEmailController =
@@ -28,12 +30,53 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
   final TextEditingController _messageController = TextEditingController();
   bool _isDisclaimerAccepted = false;
 
-  final List<String> _companies = [
-    'Bike Riders',
-    'Al Sharqi Holding',
-    'Mr. VALET Parking',
-    'Al Sharqi Logistics',
-  ];
+  List<String> _companies = [];
+
+  @override
+  void initState() {
+    super.initState();
+    final company = StorageService.getValue(StorageService.keyCompanyName);
+    if (company.isNotEmpty) {
+      _selectedCompany = company;
+      _companies = [company];
+    }
+
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    if (empNo.isNotEmpty) {
+      _employeeNoController.text = empNo;
+    }
+    final fullName = StorageService.getValue(StorageService.keyFullName);
+    if (fullName.isNotEmpty) {
+      _employeeNameController.text = fullName;
+    }
+    final phone = StorageService.getValue(StorageService.keyPhone);
+    if (phone.isNotEmpty) {
+      _employeePhoneController.text = phone;
+    }
+    final email = StorageService.getValue(StorageService.keyEmail);
+    if (email.isNotEmpty) {
+      _employeeEmailController.text = email;
+    }
+
+    _fetchCompanies();
+  }
+
+  Future<void> _fetchCompanies() async {
+    try {
+      final compList = await AuthRepository().getCompanyList();
+      if (compList.isNotEmpty && mounted) {
+        setState(() {
+          _companies = compList.map((c) => c.name).toList();
+          final savedCompany = StorageService.getValue(StorageService.keyCompanyName);
+          if (savedCompany.isNotEmpty && _companies.contains(savedCompany)) {
+            _selectedCompany = savedCompany;
+          } else if (_companies.isNotEmpty) {
+            _selectedCompany = _companies.first;
+          }
+        });
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -93,43 +136,50 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                 ),
                 const SizedBox(height: 12),
                 Flexible(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    separatorBuilder: (context, index) => const Divider(
-                      height: 1,
-                      color: AppColors.divider,
-                    ),
-                    itemBuilder: (context, index) {
-                      final option = options[index];
-                      final isSelected = option == currentValue;
-                      return ListTile(
-                        title: Text(
-                          option,
-                          style: TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 15,
-                            fontWeight: isSelected
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                            color: isSelected
-                                ? AppColors.primary
-                                : const Color(0xFF1A1310),
+                  child: options.isEmpty
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(20.0),
+                            child: CircularProgressIndicator(color: AppColors.primary),
                           ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          separatorBuilder: (context, index) => const Divider(
+                            height: 1,
+                            color: AppColors.divider,
+                          ),
+                          itemBuilder: (context, index) {
+                            final option = options[index];
+                            final isSelected = option == currentValue;
+                            return ListTile(
+                              title: Text(
+                                option,
+                                style: TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 15,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  color: isSelected
+                                      ? AppColors.primary
+                                      : const Color(0xFF1A1310),
+                                ),
+                              ),
+                              trailing: isSelected
+                                  ? const Icon(
+                                      Icons.check_circle,
+                                      color: AppColors.primary,
+                                    )
+                                  : null,
+                              onTap: () {
+                                onSelected(option);
+                                Navigator.pop(context);
+                              },
+                            );
+                          },
                         ),
-                        trailing: isSelected
-                            ? const Icon(
-                                Icons.check_circle,
-                                color: AppColors.primary,
-                              )
-                            : null,
-                        onTap: () {
-                          onSelected(option);
-                          Navigator.pop(context);
-                        },
-                      );
-                    },
-                  ),
                 ),
               ],
             ),
@@ -140,9 +190,17 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
   }
 
   void _onConfirmDetails() {
+    if (!_isDisclaimerAccepted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please accept the disclaimer before submitting'),
+        ),
+      );
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Bright idea submitted successfully!'),
+        content: Text('Bright Idea submitted successfully!'),
         backgroundColor: AppColors.primary,
       ),
     );
@@ -163,40 +221,35 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          // Header Bar with Burgundy Gradient
           _buildHeader(context),
-
-          // div.body: Main Body Container (Fill 402px, Radius TL24 TR24, Padding 24px, Gap 24px, Color #FBF6F3)
           Expanded(
             child: Container(
               width: double.infinity,
               decoration: const BoxDecoration(
-                color: Color(0xFFFBF6F3), // Exact Hex: #FBF6F3
+                color: Color(0xFFFBF6F3),
                 borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(24), // Exact Radius: 24px
+                  top: Radius.circular(24),
                 ),
               ),
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.all(24.0), // Exact Padding: 24px
+                padding: const EdgeInsets.all(24.0),
                 child: Form(
                   key: _formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Frame 40: EMPLOYEE DETAILS Section Frame
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildSectionPill('EMPLOYEE DETAILS'),
-
-                          const SizedBox(height: 16), // Exact Gap: 16px
-
-                          // 1. COMPANY Dropdown
+                          const SizedBox(height: 16),
                           _buildFieldBlock(
                             label: 'COMPANY',
                             child: _buildDropdownTile(
-                              value: _selectedCompany,
+                              value: _selectedCompany.isNotEmpty
+                                  ? _selectedCompany
+                                  : 'Select Company',
                               onTap: () {
                                 _showSelectionModal(
                                   title: 'Select Company',
@@ -211,10 +264,7 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                               },
                             ),
                           ),
-
-                          const SizedBox(height: 16), // Exact Gap: 16px
-
-                          // 2. EMPLOYEE NO. *
+                          const SizedBox(height: 16),
                           _buildFieldBlock(
                             label: 'EMPLOYEE NO.',
                             isRequired: true,
@@ -224,10 +274,7 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                               keyboardType: TextInputType.number,
                             ),
                           ),
-
-                          const SizedBox(height: 16), // Exact Gap: 16px
-
-                          // 3. EMPLOYEE NAME
+                          const SizedBox(height: 16),
                           _buildFieldBlock(
                             label: 'EMPLOYEE NAME',
                             child: _buildInputField(
@@ -235,10 +282,7 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                               hintText: 'Auto-filled from profile',
                             ),
                           ),
-
-                          const SizedBox(height: 16), // Exact Gap: 16px
-
-                          // 4. EMPLOYEE EMAIL
+                          const SizedBox(height: 16),
                           _buildFieldBlock(
                             label: 'EMPLOYEE EMAIL',
                             child: _buildInputField(
@@ -247,167 +291,129 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                               keyboardType: TextInputType.emailAddress,
                             ),
                           ),
-
-                          const SizedBox(height: 16), // Exact Gap: 16px
-
-                          // 5. EMPLOYEE PHONE
+                          const SizedBox(height: 16),
                           _buildFieldBlock(
-                            label: 'EMPLOYEE PHONE',
+                            label: 'EMPLOYEE PHONE NO.',
                             child: _buildInputField(
                               controller: _employeePhoneController,
-                              hintText: 'e.g. 5012 3456',
+                              hintText: 'Auto-filled from profile',
                               keyboardType: TextInputType.phone,
                             ),
                           ),
-
-                          const SizedBox(height: 16), // Exact Gap: 16px
-
-                          // 6. QID
+                          const SizedBox(height: 16),
                           _buildFieldBlock(
-                            label: 'QID',
+                            label: 'QID NO.',
                             child: _buildInputField(
                               controller: _qidController,
                               hintText: 'Auto-filled from profile',
+                              keyboardType: TextInputType.number,
                             ),
                           ),
-
-                          const SizedBox(height: 16), // Exact Gap: 16px
-
-                          // 7. QID EXPIRY
+                          const SizedBox(height: 16),
                           _buildFieldBlock(
-                            label: 'QID EXPIRY',
+                            label: 'QID EXPIRY DATE',
                             child: _buildInputField(
                               controller: _qidExpiryController,
-                              hintText: 'Auto-filled from profile',
+                              hintText: 'YYYY-MM-DD',
                             ),
                           ),
-
-                          const SizedBox(height: 16), // Exact Gap: 16px
-
-                          // 8. SUBJECT
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionPill('BRIGHT IDEA DETAILS'),
+                          const SizedBox(height: 16),
                           _buildFieldBlock(
-                            label: 'SUBJECT',
+                            label: 'SUBJECT / IDEA TITLE',
+                            isRequired: true,
                             child: _buildInputField(
                               controller: _subjectController,
-                              hintText: 'Give your idea a short title',
+                              hintText: 'Enter subject of your idea...',
                             ),
                           ),
-
-                          const SizedBox(height: 16), // Exact Gap: 16px
-
-                          // 9. MESSAGE
+                          const SizedBox(height: 16),
                           _buildFieldBlock(
-                            label: 'MESSAGE',
-                            child: SizedBox(
-                              height: 120,
-                              child: TextFormField(
-                                controller: _messageController,
-                                maxLines: null,
-                                expands: true,
-                                textAlignVertical: TextAlignVertical.top,
-                                style: const TextStyle(
+                            label: 'IDEA DESCRIPTION / MESSAGE',
+                            isRequired: true,
+                            child: TextFormField(
+                              controller: _messageController,
+                              maxLines: 5,
+                              style: const TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 14,
+                                color: Color(0xFF1A1310),
+                              ),
+                              decoration: InputDecoration(
+                                hintText: 'Describe your idea in detail...',
+                                hintStyle: const TextStyle(
                                   fontFamily: 'Outfit',
-                                  fontSize: 14,
-                                  color: Color(0xFF1A1310),
+                                  color: Color(0xFFAAAAAA),
+                                  fontSize: 13,
                                 ),
-                                decoration: InputDecoration(
-                                  hintText: 'Tell us about your idea...',
-                                  hintStyle: const TextStyle(
-                                    fontFamily: 'Outfit',
-                                    color: Color(0xFFA0A0A0),
-                                    fontSize: 14,
+                                filled: true,
+                                fillColor: Colors.white,
+                                contentPadding: const EdgeInsets.all(12),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE8DFE1),
                                   ),
-                                  filled: true,
-                                  fillColor: const Color(0xFFFAF7F5),
-                                  contentPadding: const EdgeInsets.all(12),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFFE8DFE1),
-                                      width: 1.0,
-                                    ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE8DFE1),
                                   ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(
-                                      color: AppColors.primary,
-                                      width: 1.5,
-                                    ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFC6134B),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-
-                          const SizedBox(height: 16), // Exact Gap: 16px
-
-                          // 10. Disclaimer Section
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _isDisclaimerAccepted = !_isDisclaimerAccepted;
-                              });
-                            },
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 22,
-                                      height: 22,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: _isDisclaimerAccepted
-                                            ? const Color(0xFFC6134B)
-                                            : Colors.white,
-                                        border: Border.all(
-                                          color: _isDisclaimerAccepted
-                                              ? const Color(0xFFC6134B)
-                                              : const Color(0xFFD0C8C4),
-                                          width: 1.5,
-                                        ),
-                                      ),
-                                      child: _isDisclaimerAccepted
-                                          ? const Icon(
-                                              Icons.check,
-                                              size: 14,
-                                              color: Colors.white,
-                                            )
-                                          : null,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    const Text(
-                                      'Disclaimer',
-                                      style: TextStyle(
-                                        fontFamily: 'Outfit',
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF1A1310),
-                                      ),
-                                    ),
-                                  ],
+                          const SizedBox(height: 16),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: Checkbox(
+                                  value: _isDisclaimerAccepted,
+                                  activeColor: const Color(0xFFC6134B),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _isDisclaimerAccepted = val ?? false;
+                                    });
+                                  },
                                 ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'I, the undersigned do hereby understand that as per the Qatar Labor Law, any absence immediately after the period of my leave above without legitimate cause for more than seven consecutive days or fifteen days in one year is tantamount to my termination of service as per the Qatar Labor Law of Article 61 section 9. Furthermore, the quarantine period in my home country for two weeks and/or the Qatar Government for another two more weeks, a total of almost 1 month, are included in my leave period above. In addition to this, I understand that upon my arrival in Qatar, I will able to return to work while completing the quarantine period, the reason why it is included in the leave period. Also, I understand and accept that the company shall book for my hotel quarantine in advance, and in case I will not be able to return to Qatar on the specified date above, I am authorizing the company to deduct from my salary the said equivalent amount of hotel quarantine from my end or service or to any other remunerations due me. Most importantly, upon my return to Qatar, I am obliged to complete and sign all the documents herein, otherwise, this signed leave application shall be considered as an authority for the company to directly deduct the said amount from my salary.',
+                              ),
+                              const SizedBox(width: 8),
+                              const Expanded(
+                                child: Text(
+                                  'I hereby confirm that all information provided above is my original idea.',
                                   style: TextStyle(
                                     fontFamily: 'Outfit',
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w400,
-                                    color: Color(0xFF666666),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xFF1A1310),
                                     height: 1.4,
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-
-                      const SizedBox(height: 24), // Exact Gap: 24px
-
-                      // button.btn-primary: Confirm Details Button
+                      const SizedBox(height: 28),
                       SizedBox(
                         width: double.infinity,
                         height: 48,
@@ -416,7 +422,7 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFC6134B),
                             elevation: 0,
-                            padding: const EdgeInsets.fromLTRB(6, 1, 6, 1),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
                             shape: const RoundedRectangleBorder(
                               borderRadius: BorderRadius.only(
                                 topLeft: Radius.circular(26),
@@ -426,28 +432,23 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                               ),
                             ),
                           ),
-                          child: Row(
+                          child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
+                            children: [
                               Text(
                                 'Confirm Details',
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                softWrap: false,
                                 style: TextStyle(
                                   fontFamily: 'Outfit',
                                   color: Colors.white,
                                   fontSize: 16,
-                                  fontWeight: FontWeight.w400,
-                                  letterSpacing: 0.16,
-                                  height: 1.0,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                               SizedBox(width: 8),
                               Icon(
                                 Icons.arrow_forward_rounded,
                                 color: Colors.white,
-                                size: 16,
+                                size: 18,
                               ),
                             ],
                           ),
@@ -460,6 +461,149 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSectionPill(String title) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFECE8),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontFamily: 'Outfit',
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF6B5D58),
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldBlock({
+    required String label,
+    bool isRequired = false,
+    required Widget child,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1A1310),
+                letterSpacing: 0.2,
+              ),
+            ),
+            if (isRequired)
+              const Text(
+                ' *',
+                style: TextStyle(
+                  color: Color(0xFFC6134B),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        child,
+      ],
+    );
+  }
+
+  Widget _buildDropdownTile({
+    required String value,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: const Color(0xFFE8DFE1),
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  color: Color(0xFF1A1310),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: Color(0xFFC6134B),
+              size: 22,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputField({
+    required TextEditingController controller,
+    required String hintText,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      style: const TextStyle(
+        fontFamily: 'Outfit',
+        fontSize: 14,
+        color: Color(0xFF1A1310),
+      ),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: const TextStyle(
+          fontFamily: 'Outfit',
+          color: Color(0xFFAAAAAA),
+          fontSize: 13,
+        ),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: Color(0xFFE8DFE1),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: Color(0xFFE8DFE1),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(
+            color: Color(0xFFC6134B),
+          ),
+        ),
       ),
     );
   }
@@ -487,7 +631,6 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Back Button Container
               Align(
                 alignment: Alignment.centerLeft,
                 child: GestureDetector(
@@ -508,13 +651,11 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                   ),
                 ),
               ),
-
-              // Title Text: "BRIGHT IDEA"
               const SizedBox(
                 height: 15,
                 child: Center(
                   child: Text(
-                    'BRIGHT IDEA',
+                    'BRIGHT IDEA FORM',
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     softWrap: false,
@@ -531,166 +672,6 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionPill(String title) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEFECE8),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontFamily: 'Outfit',
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF1A1310),
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFieldBlock({
-    required String label,
-    bool isRequired = false,
-    required Widget child,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildLabel(label, isRequired: isRequired),
-        const SizedBox(height: 8),
-        child,
-      ],
-    );
-  }
-
-  Widget _buildLabel(String text, {bool isRequired = false}) {
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: text,
-            style: const TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF5E5855),
-              letterSpacing: 0.2,
-            ),
-          ),
-          if (isRequired) ...[
-            const TextSpan(
-              text: ' *',
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFFC6134B),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInputField({
-    required TextEditingController controller,
-    String hintText = '',
-    TextInputType keyboardType = TextInputType.text,
-    bool readOnly = false,
-    VoidCallback? onTap,
-  }) {
-    return SizedBox(
-      height: 44,
-      child: TextFormField(
-        controller: controller,
-        readOnly: readOnly,
-        onTap: onTap,
-        keyboardType: keyboardType,
-        style: const TextStyle(
-          fontFamily: 'Outfit',
-          fontSize: 14,
-          color: Color(0xFF1A1310),
-        ),
-        decoration: InputDecoration(
-          hintText: hintText,
-          hintStyle: const TextStyle(
-            fontFamily: 'Outfit',
-            color: Color(0xFFA0A0A0),
-            fontSize: 14,
-          ),
-          filled: true,
-          fillColor: const Color(0xFFFAF7F5),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
-              color: Color(0xFFE8DFE1),
-              width: 1.0,
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
-              color: AppColors.primary,
-              width: 1.5,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDropdownTile({
-    required String value,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 44,
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFAF7F5),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: const Color(0xFFE8DFE1),
-            width: 1.0,
-          ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                value,
-                style: const TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 14,
-                  color: Color(0xFF1A1310),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: Color(0xFFC6134B),
-              size: 22,
-            ),
-          ],
         ),
       ),
     );

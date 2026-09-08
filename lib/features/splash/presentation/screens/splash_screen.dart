@@ -38,6 +38,12 @@ class _SplashScreenState extends State<SplashScreen>
     _navigateToNext();
   }
 
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   void _navigateToNext() async {
     await Future.delayed(const Duration(seconds: 3));
     if (mounted) {

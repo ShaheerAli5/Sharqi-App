@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/services/attendance_repository.dart';
+import '../../../../core/services/storage_service.dart';
 import '../widgets/app_drawer.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -13,6 +15,43 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final AttendanceRepository _attendanceRepository = AttendanceRepository();
+
+  bool _isLoading = true;
+  Map<String, dynamic> _dashboardData = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDashboard();
+  }
+
+  Future<void> _fetchDashboard() async {
+    setState(() => _isLoading = true);
+    try {
+      final dashData = await _attendanceRepository.getDashboardData();
+      setState(() {
+        _dashboardData = {
+          'company': dashData.company,
+          'join_date': dashData.joinDate,
+          'qid_number': dashData.qidNumber,
+          'qid_expiry': dashData.qidExpiry,
+          'passport_number': dashData.passportNumber,
+          'passport_expiry': dashData.passportExpiry,
+          'gender': dashData.gender,
+          'nationality': dashData.nationality,
+          'work_location': dashData.workLocation,
+          'location': dashData.location,
+          'manager': dashData.manager,
+        };
+      });
+    } catch (_) {
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,6 +63,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
 
+    final fullName = _dashboardData['full_name']?.toString().isNotEmpty == true
+        ? _dashboardData['full_name'].toString()
+        : StorageService.getValue(StorageService.keyFullName);
+
+    final empNo = _dashboardData['employee_number']?.toString().isNotEmpty == true
+        ? _dashboardData['employee_number'].toString()
+        : StorageService.getValue(StorageService.keyEmpNo);
+
+    final phone = _dashboardData['phone']?.toString().isNotEmpty == true
+        ? _dashboardData['phone'].toString()
+        : StorageService.getValue(StorageService.keyPhone);
+
+    final whatsapp = _dashboardData['whatsapp']?.toString().isNotEmpty == true
+        ? _dashboardData['whatsapp'].toString()
+        : StorageService.getValue(StorageService.keyWhatsAppData);
+
+    final company = _dashboardData['company']?.toString() ?? StorageService.getValue(StorageService.keyCompanyName);
+    final joinDate = _dashboardData['join_date']?.toString() ?? '';
+    final qid = _dashboardData['qid_number']?.toString() ?? '';
+    final qidExpiry = _dashboardData['qid_expiry']?.toString() ?? '';
+    final passportNo = _dashboardData['passport_number']?.toString() ?? '';
+    final passportExp = _dashboardData['passport_expiry']?.toString() ?? '';
+    final gender = _dashboardData['gender']?.toString() ?? '';
+    final nationality = _dashboardData['nationality']?.toString() ?? '';
+    final workLocation = _dashboardData['work_location']?.toString() ?? '';
+    final location = _dashboardData['location']?.toString() ?? '';
+    final manager = _dashboardData['manager']?.toString() ?? '';
+
     return Scaffold(
       key: _scaffoldKey,
       drawer: const AppDrawer(),
@@ -33,118 +100,124 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Top Burgundy Header Bar
           _buildHeader(context),
 
-          // Main Scrollable Body Container (div.body: Fill 402px x Fill 761px, Radius 24px, Padding 24px, Gap 24px)
+          // Main Scrollable Body Container
           Expanded(
             child: Container(
               width: double.infinity,
               decoration: const BoxDecoration(
                 color: Color(0xFFFBF6F3), // Exact Hex: #FBF6F3
                 borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(24), // Exact Radius: Top-left 24px, Top-right 24px
+                  top: Radius.circular(24),
                 ),
               ),
-              child: SingleChildScrollView(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                  : SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.all(24.0), // Exact Padding: 24px
+                padding: const EdgeInsets.all(24.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Profile Info Row (div.avatar-ring: Fill 354px x Fixed 86px, Gap 16px)
-                    const _ProfileInfoCard(),
+                    // Profile Info Row
+                    _ProfileInfoCard(
+                      name: fullName,
+                      empId: empNo.isNotEmpty ? 'EMP#$empNo' : '',
+                      phone: phone,
+                      whatsapp: whatsapp,
+                    ),
 
-                    const SizedBox(height: 24), // Exact Gap: 24px
+                    const SizedBox(height: 24),
 
-                    // Frame 40: Personal Details Section (Fill 354px x Hug 264px, Gap 8px)
+                    // Personal Details Section
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        _CategoryHeader(title: AppStrings.personalDetailsHeader),
-                        SizedBox(height: 8), // Exact Gap: 8px
+                      children: [
+                        const _CategoryHeader(title: AppStrings.personalDetailsHeader),
+                        const SizedBox(height: 8),
                         _DetailRow(
                           leftItem: _DetailItem(
                             icon: Icons.person_outline_rounded,
                             label: AppStrings.genderLabel,
-                            value: AppStrings.genderValue,
+                            value: gender,
                           ),
                           rightItem: _DetailItem(
                             icon: Icons.public_rounded,
                             label: AppStrings.nationalityLabel,
-                            value: AppStrings.nationalityValue,
-                            leadingWidgetInValue: _IndiaFlag(),
+                            value: nationality,
                           ),
                         ),
-                        _DividerLine(),
+                        const _DividerLine(),
                         _DetailRow(
                           leftItem: _DetailItem(
                             icon: Icons.badge_outlined,
                             label: AppStrings.qidLabel,
-                            value: AppStrings.qidValue,
+                            value: qid,
                           ),
                           rightItem: _DetailItem(
                             icon: Icons.access_time_rounded,
                             label: AppStrings.qidExpiryLabel,
-                            value: AppStrings.qidExpiryValue,
+                            value: qidExpiry,
                           ),
                         ),
-                        _DividerLine(),
+                        const _DividerLine(),
                         _DetailRow(
                           leftItem: _DetailItem(
                             icon: Icons.contact_page_outlined,
                             label: AppStrings.passportNoLabel,
-                            value: AppStrings.passportNoValue,
+                            value: passportNo,
                           ),
                           rightItem: _DetailItem(
                             icon: Icons.calendar_today_rounded,
                             label: AppStrings.passportExpLabel,
-                            value: AppStrings.passportExpValue,
+                            value: passportExp,
                           ),
                         ),
                       ],
                     ),
 
-                    const SizedBox(height: 24), // Exact Gap: 24px
+                    const SizedBox(height: 24),
 
                     // Work Details Section
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        _CategoryHeader(title: AppStrings.workDetailsHeader),
-                        SizedBox(height: 8), // Exact Gap: 8px
+                      children: [
+                        const _CategoryHeader(title: AppStrings.workDetailsHeader),
+                        const SizedBox(height: 8),
                         _DetailRow(
                           leftItem: _DetailItem(
                             icon: Icons.business_outlined,
                             label: AppStrings.companyLabel,
-                            value: AppStrings.companyValue,
+                            value: company,
                           ),
                           rightItem: _DetailItem(
                             icon: Icons.calendar_month_rounded,
                             label: AppStrings.joinDateLabel,
-                            value: AppStrings.joinDateValue,
+                            value: joinDate,
                           ),
                         ),
-                        _DividerLine(),
+                        const _DividerLine(),
                         _DetailRow(
                           leftItem: _DetailItem(
                             icon: Icons.explore_outlined,
                             label: AppStrings.locationLabel,
-                            value: AppStrings.locationValue,
+                            value: location,
                           ),
                           rightItem: _DetailItem(
                             icon: Icons.location_on_outlined,
                             label: AppStrings.workLocationLabel,
-                            value: AppStrings.workLocationValue,
+                            value: workLocation,
                           ),
                         ),
-                        _DividerLine(),
+                        const _DividerLine(),
                         _DetailRow(
                           leftItem: _DetailItem(
                             icon: Icons.people_outline_rounded,
                             label: AppStrings.managerLabel,
-                            value: AppStrings.managerValue,
+                            value: manager,
                           ),
-                          rightItem: SizedBox(),
+                          rightItem: const SizedBox(),
                         ),
-                        _DividerLine(),
+                        const _DividerLine(),
                       ],
                     ),
 
@@ -182,7 +255,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Open menu button (Fixed 44px x 44px, Radius 13px, Padding 1px, 6px, 1px, 6px, Color #FFFFFF 14%)
               Align(
                 alignment: Alignment.centerLeft,
                 child: GestureDetector(
@@ -190,12 +262,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     _scaffoldKey.currentState?.openDrawer();
                   },
                   child: Container(
-                    width: 44, // Exact Figma Width: 44px
-                    height: 44, // Exact Figma Height: 44px
-                    padding: const EdgeInsets.fromLTRB(6, 1, 6, 1), // Exact Padding: Top 1, Right 6, Bottom 1, Left 6
+                    width: 44,
+                    height: 44,
+                    padding: const EdgeInsets.fromLTRB(6, 1, 6, 1),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.14), // Exact Color: #FFFFFF 14%
-                      borderRadius: BorderRadius.circular(13), // Exact Radius: 13px
+                      color: Colors.white.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(13),
                     ),
                     child: const Icon(
                       Icons.menu_rounded,
@@ -205,11 +277,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ),
-
-              // Title Text: "DASHBOARD" (Text Dashboard - Width 88px x Height 15px, Size 12px, Weight 600 SemiBold, Letter spacing 1.68px, Uppercase)
               const SizedBox(
-                width: 88, // Exact Figma Width: 88px
-                height: 15, // Exact Figma Height: 15px
+                width: 88,
+                height: 15,
                 child: Center(
                   child: Text(
                     AppStrings.dashboardTitle,
@@ -217,10 +287,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: TextStyle(
                       fontFamily: 'Outfit',
                       color: Colors.white,
-                      fontSize: 12, // Exact Figma Size: 12px
-                      fontWeight: FontWeight.w600, // Exact Figma Weight: 600 SemiBold
-                      letterSpacing: 1.68, // Exact Figma Letter Spacing: 1.68px
-                      height: 1.0, // Exact Line Height: 100%
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.68,
+                      height: 1.0,
                     ),
                   ),
                 ),
@@ -233,47 +303,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-// Profile Info Card (div.avatar-ring: Fill 354px x Fixed 86px, Gap 16px)
+// Profile Info Card
 class _ProfileInfoCard extends StatelessWidget {
-  const _ProfileInfoCard();
+  final String name;
+  final String empId;
+  final String phone;
+  final String whatsapp;
+
+  const _ProfileInfoCard({
+    required this.name,
+    required this.empId,
+    required this.phone,
+    required this.whatsapp,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final profileImg = StorageService.getValue(StorageService.keyProfileImage);
+
     return SizedBox(
       height: 86, // Exact Height: Fixed 86px
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Profile Avatar Image (Width 86px x Height 86px, Radius 9999px)
           Container(
             width: 86, // Exact Figma Width: 86px
             height: 86, // Exact Figma Height: 86px
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.grey.shade300,
-              image: const DecorationImage(
-                image: NetworkImage(
-                  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=400&h=400&q=80',
-                ),
+            ),
+            child: profileImg.isNotEmpty
+                ? ClipOval(
+              child: Image.network(
+                profileImg,
                 fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.person_outline_rounded,
+                  size: 40,
+                  color: AppColors.primary,
+                ),
               ),
+            )
+                : const Icon(
+              Icons.person_outline_rounded,
+              size: 40,
+              color: AppColors.primary,
             ),
           ),
-
-          const SizedBox(width: 16), // Exact Gap: 16px
-
-          // Frame 31: Profile Text Column (Fill 252px x Fill 86px, Gap 8px)
+          const SizedBox(width: 16),
           Expanded(
             child: SizedBox(
-              height: 86, // Exact Height: Fill 86px
+              height: 86,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Employee Name
-                  const Text(
-                    AppStrings.employeeName,
-                    style: TextStyle(
+                  Text(
+                    name.isNotEmpty ? name : 'Employee',
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                       color: AppColors.detailValueColor,
@@ -282,38 +370,31 @@ class _ProfileInfoCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-
-                  // EMP# Badge Pill
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.empChipBg,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      AppStrings.employeeId,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.empChipText,
-                        letterSpacing: 0.3,
+                  if (empId.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.empChipBg,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        empId,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.empChipText,
+                          letterSpacing: 0.3,
+                        ),
                       ),
                     ),
-                  ),
-
-                  // div.menu-chips: Contact Chips (Hug 156px x Hug 25px, Gap 8px)
                   Row(
-                    children: const [
-                      // Phone Chip (span.phone-chip: Hug 74px x Fixed 25px, Radius 999px, Padding L4/R4, Gap 6px)
-                      _PhoneChip(label: AppStrings.phoneNumber),
-
-                      SizedBox(width: 8), // Exact Gap: 8px
-
-                      // WhatsApp Chip
-                      _WhatsAppChip(label: AppStrings.whatsappNumber),
+                    children: [
+                      if (phone.isNotEmpty) _PhoneChip(label: phone),
+                      if (phone.isNotEmpty && whatsapp.isNotEmpty) const SizedBox(width: 8),
+                      if (whatsapp.isNotEmpty) _WhatsAppChip(label: whatsapp),
                     ],
                   ),
                 ],
@@ -326,7 +407,6 @@ class _ProfileInfoCard extends StatelessWidget {
   }
 }
 
-// span.phone-chip: Hug 74px x Fixed 25px, Radius 999px, Padding Left 4px, Right 4px, Gap 6px, Color #FF3636 5%
 class _PhoneChip extends StatelessWidget {
   final String label;
 
@@ -335,11 +415,11 @@ class _PhoneChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 25, // Exact Height: Fixed 25px
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), // Exact Padding: Left 4px, Right 4px
+      height: 25,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: const Color(0xFFFF3636).withValues(alpha: 0.08), // Exact Color: #FF3636 at 5-8%
-        borderRadius: BorderRadius.circular(999), // Exact Radius: 999px
+        color: const Color(0xFFFF3636).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -349,7 +429,7 @@ class _PhoneChip extends StatelessWidget {
             size: 13,
             color: AppColors.detailIconColor,
           ),
-          const SizedBox(width: 4), // Exact Gap: 6px
+          const SizedBox(width: 4),
           Text(
             label,
             style: const TextStyle(
@@ -372,11 +452,11 @@ class _WhatsAppChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 25, // Exact Height: Fixed 25px
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), // Exact Padding: Left 4px, Right 4px
+      height: 25,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: AppColors.whatsappChipBg,
-        borderRadius: BorderRadius.circular(999), // Exact Radius: 999px
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -386,7 +466,7 @@ class _WhatsAppChip extends StatelessWidget {
             size: 13,
             color: AppColors.whatsappIconColor,
           ),
-          const SizedBox(width: 4), // Exact Gap: 6px
+          const SizedBox(width: 4),
           Text(
             label,
             style: const TextStyle(
@@ -459,13 +539,11 @@ class _DetailItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  final Widget? leadingWidgetInValue;
 
   const _DetailItem({
     required this.icon,
     required this.label,
     required this.value,
-    this.leadingWidgetInValue,
   });
 
   @override
@@ -494,10 +572,6 @@ class _DetailItem extends StatelessWidget {
               const SizedBox(height: 2),
               Row(
                 children: [
-                  if (leadingWidgetInValue != null) ...[
-                    leadingWidgetInValue!,
-                    const SizedBox(width: 6),
-                  ],
                   Flexible(
                     child: Text(
                       value,
@@ -519,50 +593,6 @@ class _DetailItem extends StatelessWidget {
   }
 }
 
-class _IndiaFlag extends StatelessWidget {
-  const _IndiaFlag();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 20,
-      height: 13,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(2),
-        border: Border.all(color: Colors.black12, width: 0.5),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(1.5),
-        child: Column(
-          children: [
-            Expanded(
-              child: Container(color: const Color(0xFFFF9933)),
-            ),
-            Expanded(
-              child: Container(
-                color: Colors.white,
-                child: Center(
-                  child: Container(
-                    width: 3.5,
-                    height: 3.5,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF000080),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              child: Container(color: const Color(0xFF138808)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _DividerLine extends StatelessWidget {
   const _DividerLine();
 
@@ -578,3 +608,4 @@ class _DividerLine extends StatelessWidget {
     );
   }
 }
+
