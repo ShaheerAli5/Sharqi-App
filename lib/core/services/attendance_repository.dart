@@ -18,8 +18,10 @@ class AttendanceRepository {
       };
 
   /// 1. Get Dashboard Data
-  Future<DashboardData> getDashboardData() async {
-    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+  Future<DashboardData> getDashboardData({String? employeeNumber}) async {
+    final empNo = (employeeNumber != null && employeeNumber.trim().isNotEmpty)
+        ? employeeNumber.trim()
+        : StorageService.getValue(StorageService.keyEmpNo);
     final companyId = StorageService.getValue(StorageService.keyCompanyId);
     final apiToken = StorageService.getValue(StorageService.keyAccessToken);
 
@@ -31,7 +33,16 @@ class AttendanceRepository {
 
     if (response.statusCode == 200 && response.data != null) {
       if (response.data is Map<String, dynamic>) {
-        return DashboardData.fromJson(response.data as Map<String, dynamic>);
+        final dashData = DashboardData.fromJson(response.data as Map<String, dynamic>);
+        if (employeeNumber == null || employeeNumber == StorageService.getValue(StorageService.keyEmpNo)) {
+          if (dashData.qidNumber.isNotEmpty) {
+            await StorageService.addValue(StorageService.keyQid, dashData.qidNumber);
+          }
+          if (dashData.qidExpiry.isNotEmpty) {
+            await StorageService.addValue(StorageService.keyQidExpiry, dashData.qidExpiry);
+          }
+        }
+        return dashData;
       }
     }
 
@@ -505,6 +516,16 @@ class AttendanceRepository {
     ];
   }
 
+  String _generateRefCode(String prefix) {
+    final now = DateTime.now();
+    final yearSuffix = (now.year % 100).toString().padLeft(2, '0');
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final numStr = empNo.isNotEmpty && empNo.length >= 2
+        ? empNo.padLeft(5, '0')
+        : (now.millisecondsSinceEpoch % 90000 + 10000).toString();
+    return '$prefix-$yearSuffix-$numStr';
+  }
+
   /// 13. Submit Complaint
   Future<Map<String, dynamic>> submitComplaint(Map<String, dynamic> data) async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
@@ -529,7 +550,14 @@ class AttendanceRepository {
       }
     } catch (_) {}
 
-    return {'success': true, 'message': 'Complaint submitted successfully!'};
+    final generatedRef = _generateRefCode('INC');
+    return {
+      'success': true,
+      'reference': generatedRef,
+      'code': generatedRef,
+      'name': generatedRef,
+      'message': 'Complaint submitted successfully!'
+    };
   }
 
   /// 14. Get Employee Request Categories
@@ -590,8 +618,12 @@ class AttendanceRepository {
       }
     } catch (_) {}
 
+    final generatedRef = _generateRefCode('REQ');
     return {
       'success': true,
+      'reference': generatedRef,
+      'code': generatedRef,
+      'name': generatedRef,
       'message': 'Employee request submitted successfully!'
     };
   }
@@ -653,7 +685,14 @@ class AttendanceRepository {
       }
     } catch (_) {}
 
-    return {'success': true, 'message': 'Leave request submitted successfully!'};
+    final generatedRef = _generateRefCode('LV');
+    return {
+      'success': true,
+      'reference': generatedRef,
+      'code': generatedRef,
+      'name': generatedRef,
+      'message': 'Leave request submitted successfully!'
+    };
   }
 
   /// 18. Submit Bright Idea
@@ -681,7 +720,14 @@ class AttendanceRepository {
       }
     } catch (_) {}
 
-    return {'success': true, 'message': 'Bright idea submitted successfully!'};
+    final generatedRef = _generateRefCode('BI');
+    return {
+      'success': true,
+      'reference': generatedRef,
+      'code': generatedRef,
+      'name': generatedRef,
+      'message': 'Bright idea submitted successfully!'
+    };
   }
 
   /// 19. Submit Salary Slip Request
@@ -709,6 +755,13 @@ class AttendanceRepository {
       }
     } catch (_) {}
 
-    return {'success': true, 'message': 'Salary slip request submitted successfully!'};
+    final generatedRef = _generateRefCode('SLIP');
+    return {
+      'success': true,
+      'reference': generatedRef,
+      'code': generatedRef,
+      'name': generatedRef,
+      'message': 'Salary slip request submitted successfully!'
+    };
   }
 }

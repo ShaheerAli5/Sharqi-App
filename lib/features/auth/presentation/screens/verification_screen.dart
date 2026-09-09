@@ -147,7 +147,16 @@ class _VerificationScreenState extends State<VerificationScreen> {
       final empNumber = StorageService.getValue(StorageService.keyEmpNo);
       final companyId = StorageService.getValue(StorageService.keyCompanyId);
       if (empNumber.isNotEmpty && companyId.isNotEmpty) {
-        await _authRepository.sendOTP(empNumber, companyId);
+        final res = await _authRepository.sendOTP(empNumber, companyId);
+        if (res.registerMobile != null && res.registerMobile!.isNotEmpty) {
+          await StorageService.addValue(
+              StorageService.keyPhone, res.registerMobile!);
+          await StorageService.addValue(
+              StorageService.keyWhatsAppPhone, res.registerMobile!);
+          if (mounted) {
+            setState(() {});
+          }
+        }
       }
     } catch (_) {}
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/app_colors.dart';
 import 'notifications_screen.dart';
 
@@ -11,13 +12,65 @@ class NotificationDetailScreen extends StatelessWidget {
     required this.item,
   });
 
+  String _resolveAttachmentUrl(String rawUrl) {
+    if (rawUrl.isEmpty) return '';
+    String fullUrl = rawUrl.trim();
+    if (!fullUrl.startsWith('http://') && !fullUrl.startsWith('https://')) {
+      const baseUrl = "https://erp.alsharqiholding.qa";
+      fullUrl = fullUrl.startsWith('/') ? '$baseUrl$fullUrl' : '$baseUrl/$fullUrl';
+    }
+    if (!fullUrl.contains('download=true') && fullUrl.contains('/web/content/')) {
+      fullUrl += fullUrl.contains('?') ? '&download=true' : '?download=true';
+    }
+    return fullUrl;
+  }
+
+  Future<void> _downloadOrOpenAttachment(
+      BuildContext context, String rawUrl) async {
+    final fullUrl = _resolveAttachmentUrl(rawUrl);
+    if (fullUrl.isEmpty) return;
+
+    final fileName = item.attachmentName ?? 'attachment';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Downloading $fileName...'),
+        backgroundColor: AppColors.primary,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    try {
+      final uri = Uri.parse(fullUrl);
+      bool launched = false;
+      try {
+        if (await canLaunchUrl(uri)) {
+          launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      } catch (_) {}
+
+      if (!launched) {
+        try {
+          launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  static final RegExp _brRegExp = RegExp(r'<br\s*/?>', caseSensitive: false);
+  static final RegExp _pRegExp = RegExp(r'</p>', caseSensitive: false);
+  static final RegExp _divRegExp = RegExp(r'</div>', caseSensitive: false);
+  static final RegExp _tagsRegExp = RegExp(r'<[^>]*>');
+  static final RegExp _newlinesRegExp = RegExp(r'\n{3,}');
+
   String _cleanHtml(String text) {
     if (text.isEmpty) return '';
     String cleaned = text
-        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n')
-        .replaceAll(RegExp(r'</div>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll(_brRegExp, '\n')
+        .replaceAll(_pRegExp, '\n\n')
+        .replaceAll(_divRegExp, '\n')
+        .replaceAll(_tagsRegExp, '')
         .replaceAll('&nbsp;', ' ')
         .replaceAll('&amp;', '&')
         .replaceAll('&lt;', '<')
@@ -25,7 +78,7 @@ class NotificationDetailScreen extends StatelessWidget {
         .replaceAll('&quot;', '"')
         .replaceAll('&#39;', "'");
 
-    return cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+    return cleaned.replaceAll(_newlinesRegExp, '\n\n').trim();
   }
 
   @override
@@ -222,17 +275,24 @@ class NotificationDetailScreen extends StatelessWidget {
           ],
 
           // Attachment Card if present
-          if (item.attachmentName != null && item.attachmentName!.isNotEmpty) ...[
+          if ((item.attachmentUrl != null && item.attachmentUrl!.isNotEmpty) ||
+              (item.attachmentName != null && item.attachmentName!.isNotEmpty)) ...[
             const SizedBox(height: 24),
             GestureDetector(
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Opening ${item.attachmentName}...'),
-                    backgroundColor: const Color(0xFFC6134B),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                final url = item.attachmentUrl ?? '';
+                if (url.isNotEmpty) {
+                  _downloadOrOpenAttachment(context, url);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          'Attachment link for ${item.attachmentName ?? "this file"} is processing.'),
+                      backgroundColor: const Color(0xFFC6134B),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
               },
               child: Container(
                 width: double.infinity,
@@ -254,15 +314,10 @@ class NotificationDetailScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       alignment: Alignment.center,
-                      child: const Text(
-                        'PDF',
-                        style: TextStyle(
-                          fontFamily: 'Outfit',
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
+                      child: const Icon(
+                        Icons.picture_as_pdf_rounded,
+                        color: Colors.white,
+                        size: 20,
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -271,7 +326,7 @@ class NotificationDetailScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'View Attachment',
+                            'Attachment File',
                             style: TextStyle(
                               fontFamily: 'Outfit',
                               fontSize: 13,
@@ -281,7 +336,7 @@ class NotificationDetailScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            item.attachmentName!,
+                            item.attachmentName ?? 'Download / View Attachment',
                             style: const TextStyle(
                               fontFamily: 'Outfit',
                               fontSize: 11,
@@ -295,8 +350,8 @@ class NotificationDetailScreen extends StatelessWidget {
                       ),
                     ),
                     const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 16,
+                      Icons.download_rounded,
+                      size: 20,
                       color: Color(0xFFC6134B),
                     ),
                   ],

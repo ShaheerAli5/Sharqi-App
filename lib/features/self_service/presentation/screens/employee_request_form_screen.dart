@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/attendance_repository.dart';
 import '../../../../core/services/auth_repository.dart';
 import '../../../../core/services/storage_service.dart';
+import '../widgets/request_success_dialog.dart';
+import '../widgets/self_service_otp_modal.dart';
 
 class EmployeeRequestFormScreen extends StatefulWidget {
   const EmployeeRequestFormScreen({super.key});
@@ -34,8 +38,6 @@ class _EmployeeRequestFormScreenState
   String _selectedWorkingLocation = 'Doha Main Office';
   final TextEditingController _descriptionController =
       TextEditingController();
-
-  bool _isSubmitting = false;
 
   List<String> _companies = [];
   List<String> _workingLocations = [];
@@ -126,8 +128,41 @@ class _EmployeeRequestFormScreenState
     return '$hour:$minute $period';
   }
 
+  Timer? _employeeLookupTimer;
+
+  void _fetchEmployeeDetailsByNumber(String val) {
+    _employeeLookupTimer?.cancel();
+    final typedNo = val.trim();
+    if (typedNo.isEmpty) return;
+
+    final storedEmpNo = StorageService.getValue(StorageService.keyEmpNo);
+    if (typedNo == storedEmpNo) {
+      _employeeNameController.text = StorageService.getValue(StorageService.keyFullName);
+      _employeeEmailController.text = StorageService.getValue(StorageService.keyEmail);
+      _employeePhoneController.text = StorageService.getValue(StorageService.keyPhone);
+      return;
+    }
+
+    _employeeLookupTimer = Timer(const Duration(milliseconds: 400), () async {
+      try {
+        final dashData = await AttendanceRepository().getDashboardData(employeeNumber: typedNo);
+        if (mounted) {
+          setState(() {
+            if (dashData.fullName.isNotEmpty) {
+              _employeeNameController.text = dashData.fullName;
+            }
+            if (dashData.phone.isNotEmpty) {
+              _employeePhoneController.text = dashData.phone;
+            }
+          });
+        }
+      } catch (_) {}
+    });
+  }
+
   @override
   void dispose() {
+    _employeeLookupTimer?.cancel();
     _employeeNoController.dispose();
     _employeeNameController.dispose();
     _employeeEmailController.dispose();
@@ -291,55 +326,74 @@ class _EmployeeRequestFormScreenState
   }
 
   Future<void> _onConfirmDetails() async {
-    if (_employeeNoController.text.trim().isEmpty) {
+    final empNo = _employeeNoController.text.trim();
+    if (empNo.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter Employee Number')),
       );
       return;
     }
 
-    setState(() => _isSubmitting = true);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final phone = _employeePhoneController.text.trim().isNotEmpty
+        ? _employeePhoneController.text.trim()
+        : StorageService.getValue(StorageService.keyPhone);
 
-    try {
-      final payload = {
-        'company': _selectedCompany,
-        'employee_number': _employeeNoController.text.trim(),
-        'employee_name': _employeeNameController.text.trim(),
-        'employee_email': _employeeEmailController.text.trim(),
-        'employee_phone': _employeePhoneController.text.trim(),
-        'request_datetime': _dateTimeController.text.trim(),
-        'category': _selectedCategory,
-        'working_location': _selectedWorkingLocation,
-        'description': _descriptionController.text.trim(),
-      };
+    // Open mandatory OTP Verification Modal before processing
+    final result = await SelfServiceOtpModal.show(
+      context: context,
+      employeeNumber: empNo,
+      companyId: companyId,
+      phoneNumber: phone,
+      requestTitle: 'Employee Request',
+      onVerifyAndSubmit: () async {
+        try {
+          final payload = {
+            'company': _selectedCompany,
+            'employee_number': empNo,
+            'employee_name': _employeeNameController.text.trim(),
+            'employee_email': _employeeEmailController.text.trim(),
+            'employee_phone': phone,
+            'request_datetime': _dateTimeController.text.trim(),
+            'category': _selectedCategory,
+            'working_location': _selectedWorkingLocation,
+            'description': _descriptionController.text.trim(),
+            'otp_verified': true,
+          };
 
-      final response =
-          await AttendanceRepository().submitEmployeeRequest(payload);
-
-      if (mounted) {
-        if (response['error'] != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed: ${response['error']}')),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Employee request submitted successfully!'),
-              backgroundColor: AppColors.primary,
-            ),
-          );
-          Navigator.pop(context);
+          return await AttendanceRepository().submitEmployeeRequest(payload);
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Submission error: $e')),
+            );
+          }
+          return null;
         }
-      }
-    } catch (e) {
-      if (mounted) {
+      },
+    );
+
+    if (result != null && mounted) {
+      if (result['error'] != null && result['error'].toString().isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Submission error: $e')),
+          SnackBar(content: Text('Failed: ${result['error']}')),
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
+      } else {
+        final refCode = (result['reference'] ??
+                result['code'] ??
+                result['name'] ??
+                result['number'] ??
+                '')
+            .toString();
+
+        Navigator.pop(context); // Close form screen
+
+        RequestSuccessDialog.show(
+          context: context,
+          requestType: 'Employee',
+          referenceCode: refCode,
+          customMessage: result['message']?.toString(),
+        );
       }
     }
   }
@@ -410,6 +464,7 @@ class _EmployeeRequestFormScreenState
                               controller: _employeeNoController,
                               hintText: 'e.g. 20481',
                               keyboardType: TextInputType.number,
+                              onChanged: _fetchEmployeeDetailsByNumber,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -418,6 +473,7 @@ class _EmployeeRequestFormScreenState
                             child: _buildInputField(
                               controller: _employeeNameController,
                               hintText: 'Auto-filled from profile',
+                              readOnly: true,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -427,6 +483,7 @@ class _EmployeeRequestFormScreenState
                               controller: _employeeEmailController,
                               hintText: 'Auto-filled from profile',
                               keyboardType: TextInputType.emailAddress,
+                              readOnly: true,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -436,6 +493,7 @@ class _EmployeeRequestFormScreenState
                               controller: _employeePhoneController,
                               hintText: 'Auto-filled from profile',
                               keyboardType: TextInputType.phone,
+                              readOnly: true,
                             ),
                           ),
                         ],
@@ -559,7 +617,7 @@ class _EmployeeRequestFormScreenState
                         width: double.infinity,
                         height: 48,
                         child: ElevatedButton(
-                          onPressed: _isSubmitting ? null : _onConfirmDetails,
+                          onPressed: _onConfirmDetails,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFC6134B),
                             elevation: 0,
@@ -573,35 +631,26 @@ class _EmployeeRequestFormScreenState
                               ),
                             ),
                           ),
-                          child: _isSubmitting
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Confirm Details',
-                                      style: TextStyle(
-                                        fontFamily: 'Outfit',
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    SizedBox(width: 8),
-                                    Icon(
-                                      Icons.arrow_forward_rounded,
-                                      color: Colors.white,
-                                      size: 18,
-                                    ),
-                                  ],
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Confirm Details',
+                                style: TextStyle(
+                                  fontFamily: 'Outfit',
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
                                 ),
+                              ),
+                              SizedBox(width: 8),
+                              Icon(
+                                Icons.arrow_forward_rounded,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -717,15 +766,19 @@ class _EmployeeRequestFormScreenState
     required TextEditingController controller,
     required String hintText,
     TextInputType keyboardType = TextInputType.text,
+    bool readOnly = false,
     Widget? suffixIcon,
+    ValueChanged<String>? onChanged,
   }) {
     return TextFormField(
       controller: controller,
+      readOnly: readOnly,
       keyboardType: keyboardType,
-      style: const TextStyle(
+      onChanged: onChanged,
+      style: TextStyle(
         fontFamily: 'Outfit',
         fontSize: 14,
-        color: Color(0xFF1A1310),
+        color: readOnly ? const Color(0xFF555555) : const Color(0xFF1A1310),
       ),
       decoration: InputDecoration(
         hintText: hintText,
@@ -735,7 +788,7 @@ class _EmployeeRequestFormScreenState
           fontSize: 13,
         ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: readOnly ? const Color(0xFFF2ECE8) : Colors.white,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         border: OutlineInputBorder(
@@ -752,8 +805,8 @@ class _EmployeeRequestFormScreenState
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(
-            color: Color(0xFFC6134B),
+          borderSide: BorderSide(
+            color: readOnly ? const Color(0xFFE8DFE1) : const Color(0xFFC6134B),
           ),
         ),
         suffixIcon: suffixIcon,

@@ -15,6 +15,8 @@ class StorageService {
   static const String keyWhatsAppPhone = "WHATS_APP_PHONE";
   static const String keyWhatsAppData = "WHATS_APP_PHONE"; // Alias for backward compatibility
   static const String keyCompanyName = "COMPANY_NAME";
+  static const String keyQid = "QID_NUMBER";
+  static const String keyQidExpiry = "QID_EXPIRY";
 
   static SharedPreferences? _prefs;
 

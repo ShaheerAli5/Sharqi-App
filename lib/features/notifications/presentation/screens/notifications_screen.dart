@@ -17,6 +17,7 @@ class NotificationItem {
   final String? englishBody;
   final String? arabicBody;
   final String? attachmentName;
+  final String? attachmentUrl;
   final Map<String, String>? extraDetails;
 
   const NotificationItem({
@@ -31,6 +32,7 @@ class NotificationItem {
     this.englishBody,
     this.arabicBody,
     this.attachmentName,
+    this.attachmentUrl,
     this.extraDetails,
   });
 }
@@ -55,13 +57,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     _fetchNotifications();
   }
 
+  static final RegExp _brRegExp = RegExp(r'<br\s*/?>', caseSensitive: false);
+  static final RegExp _pRegExp = RegExp(r'</p>', caseSensitive: false);
+  static final RegExp _divRegExp = RegExp(r'</div>', caseSensitive: false);
+  static final RegExp _tagsRegExp = RegExp(r'<[^>]*>');
+  static final RegExp _newlinesRegExp = RegExp(r'\n{3,}');
+
   String _cleanHtml(String text) {
     if (text.isEmpty) return '';
     String cleaned = text
-        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n')
-        .replaceAll(RegExp(r'</div>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll(_brRegExp, '\n')
+        .replaceAll(_pRegExp, '\n\n')
+        .replaceAll(_divRegExp, '\n')
+        .replaceAll(_tagsRegExp, '')
         .replaceAll('&nbsp;', ' ')
         .replaceAll('&amp;', '&')
         .replaceAll('&lt;', '<')
@@ -69,7 +77,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         .replaceAll('&quot;', '"')
         .replaceAll('&#39;', "'");
 
-    return cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+    return cleaned.replaceAll(_newlinesRegExp, '\n\n').trim();
   }
 
   Future<void> _fetchNotifications() async {
@@ -82,6 +90,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         final desc = _cleanHtml(item.message);
         final date = item.timestamp;
         final tag = item.notificationTag.isNotEmpty ? item.notificationTag : 'Notification';
+        final attUrl = item.attachmentUrl;
+        final attName = item.attachmentName.isNotEmpty
+            ? item.attachmentName
+            : (attUrl.isNotEmpty ? attUrl.split('/').last : null);
+
         fetched.add(NotificationItem(
           id: item.notificationId.toString(),
           title: title,
@@ -92,6 +105,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           badgeTextColor: Colors.white,
           isUnread: item.state != 'read',
           englishBody: desc,
+          attachmentUrl: attUrl.isNotEmpty ? attUrl : null,
+          attachmentName: attName,
         ));
       }
       setState(() {
@@ -290,18 +305,43 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
           const SizedBox(height: 12),
 
-          // Date / Time Text (Right Aligned)
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              item.date,
-              style: const TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF888888),
+          // Date & Attachment Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (item.attachmentUrl != null || item.attachmentName != null) ...[
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.attach_file_rounded,
+                      size: 14,
+                      color: Color(0xFFC6134B),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      item.attachmentName ?? 'Attachment',
+                      style: const TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFC6134B),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                const SizedBox(),
+              ],
+              Text(
+                item.date,
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF888888),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),

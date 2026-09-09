@@ -47,8 +47,16 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
   Future<void> _checkStatusAndFetchLocations() async {
     setState(() => _isLoadingLocations = true);
     try {
-      // 1. Check current attendance status
-      final status = await _attendanceRepository.getTodaysTimeInOut();
+      final results = await Future.wait([
+        _attendanceRepository.getTodaysTimeInOut(),
+        _attendanceRepository.getWorkLocationList(),
+        _attendanceRepository.getTodayWorkLocation(),
+      ]);
+
+      final status = results[0] as TimeInOutStatus;
+      final locList = results[1] as List<WorkLocationItem>;
+      final todayLoc = results[2] as TodayWorkLocation;
+
       if (status.isTimeIn) {
         _isAlreadyTimeIn = true;
         if (mounted) {
@@ -56,12 +64,7 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
         }
       }
 
-      // 2. Fetch work locations list
-      final locList = await _attendanceRepository.getWorkLocationList();
       _locations = locList;
-
-      // 3. Fetch today's assigned location from API
-      final todayLoc = await _attendanceRepository.getTodayWorkLocation();
       _todayWorkLocation = todayLoc;
       if (todayLoc.id > 0) {
         _selectedLocation = todayLoc;

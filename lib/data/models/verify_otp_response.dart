@@ -10,6 +10,8 @@ class VerifyOtpResponse {
   final String apiToken;
   final String profileImageBase64;
   final String whatsappPhone;
+  final String qidNumber;
+  final String qidExpiry;
 
   VerifyOtpResponse({
     this.success,
@@ -23,6 +25,8 @@ class VerifyOtpResponse {
     required this.apiToken,
     required this.profileImageBase64,
     required this.whatsappPhone,
+    this.qidNumber = '',
+    this.qidExpiry = '',
   });
 
   factory VerifyOtpResponse.fromJson(Map<String, dynamic> json) {
@@ -52,6 +56,8 @@ class VerifyOtpResponse {
       apiToken: parseStringSafe(result['api_token']),
       profileImageBase64: parseStringSafe(result['profile']),
       whatsappPhone: parseStringSafe(result['whatsapp_phone']),
+      qidNumber: parseStringSafe(result['qid_number'] ?? result['qid'] ?? result['qid_no']),
+      qidExpiry: parseStringSafe(result['qid_expiry'] ?? result['qid_exp']),
     );
   }
 

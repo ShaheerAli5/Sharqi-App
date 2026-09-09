@@ -168,6 +168,13 @@ class _SignInScreenState extends State<SignInScreen> {
     try {
       final otpRes = await _authRepository.sendOTP(empNumber, companyId);
       if (otpRes.isSuccess) {
+        if (otpRes.registerMobile != null &&
+            otpRes.registerMobile!.isNotEmpty) {
+          await StorageService.addValue(
+              StorageService.keyPhone, otpRes.registerMobile!);
+          await StorageService.addValue(
+              StorageService.keyWhatsAppPhone, otpRes.registerMobile!);
+        }
         if (mounted) {
           Navigator.pushNamed(context, AppRoutes.verification);
         }
