@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -8,14 +5,14 @@ import '../../../../core/services/attendance_repository.dart';
 import '../../../../core/services/auth_repository.dart';
 import '../../../../core/services/storage_service.dart';
 
-class ComplaintFormScreen extends StatefulWidget {
-  const ComplaintFormScreen({super.key});
+class SalarySlipScreen extends StatefulWidget {
+  const SalarySlipScreen({super.key});
 
   @override
-  State<ComplaintFormScreen> createState() => _ComplaintFormScreenState();
+  State<SalarySlipScreen> createState() => _SalarySlipScreenState();
 }
 
-class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
+class _SalarySlipScreenState extends State<SalarySlipScreen> {
   final _formKey = GlobalKey<FormState>();
 
   // Form Fields State
@@ -28,37 +25,35 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
       TextEditingController();
   final TextEditingController _employeePhoneController =
       TextEditingController();
+  final TextEditingController _qidController = TextEditingController();
+  final TextEditingController _qidExpiryController = TextEditingController();
 
-  String _requestDateTime = '';
-  late final TextEditingController _dateTimeController;
-  String _selectedCategory = 'Salary Issue';
-  final TextEditingController _incidentLocationController =
-      TextEditingController();
-  String _selectedWorkingLocation = 'Abu Sidra';
-  bool _isAgainstPerson = false;
-  final TextEditingController _descriptionController =
-      TextEditingController();
-
-  PlatformFile? _attachedFile;
+  String _selectedMonth = 'January';
+  bool _isDisclaimerAccepted = false;
   bool _isSubmitting = false;
 
   List<String> _companies = [];
-  List<String> _workingLocations = [];
-  List<String> _categories = [
-    'Salary Issue',
-    'HR Query',
-    'Management Issue',
-    'Workplace Safety',
-    'Other',
+  final List<String> _months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   @override
   void initState() {
     super.initState();
+
     final now = DateTime.now();
-    _requestDateTime =
-        '${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')}/${now.year} ${_formatTime(now)}';
-    _dateTimeController = TextEditingController(text: _requestDateTime);
+    _selectedMonth = _months[now.month - 1];
 
     final company = StorageService.getValue(StorageService.keyCompanyName);
     if (company.isNotEmpty) {
@@ -89,8 +84,7 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
   Future<void> _fetchApiData() async {
     try {
       final compList = await AuthRepository().getCompanyList();
-      final locList = await AttendanceRepository().getWorkLocationList();
-      final catList = await AttendanceRepository().getComplaintCategories();
+      final dashData = await AttendanceRepository().getDashboardData();
 
       if (mounted) {
         setState(() {
@@ -104,29 +98,15 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
               _selectedCompany = _companies.first;
             }
           }
-          if (locList.isNotEmpty) {
-            _workingLocations = locList.map((l) => l.name).toList();
-            if (_workingLocations.isNotEmpty) {
-              _selectedWorkingLocation = _workingLocations.first;
-            }
+          if (dashData.qidNumber.isNotEmpty) {
+            _qidController.text = dashData.qidNumber;
           }
-          if (catList.isNotEmpty) {
-            _categories = catList;
-            if (_categories.isNotEmpty) {
-              _selectedCategory = _categories.first;
-            }
+          if (dashData.qidExpiry.isNotEmpty) {
+            _qidExpiryController.text = dashData.qidExpiry;
           }
         });
       }
     } catch (_) {}
-  }
-
-  String _formatTime(DateTime dt) {
-    final hourOfPeriod = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final hour = hourOfPeriod.toString().padLeft(2, '0');
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final period = dt.hour >= 12 ? 'PM' : 'AM';
-    return '$hour:$minute $period';
   }
 
   @override
@@ -135,36 +115,9 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
     _employeeNameController.dispose();
     _employeeEmailController.dispose();
     _employeePhoneController.dispose();
-    _dateTimeController.dispose();
-    _incidentLocationController.dispose();
-    _descriptionController.dispose();
+    _qidController.dispose();
+    _qidExpiryController.dispose();
     super.dispose();
-  }
-
-  Future<void> _pickFile() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        allowMultiple: false,
-      );
-      if (result != null && result.files.isNotEmpty) {
-        setState(() {
-          _attachedFile = result.files.first;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking file: $e')),
-        );
-      }
-    }
-  }
-
-  void _removeFile() {
-    setState(() {
-      _attachedFile = null;
-    });
   }
 
   void _showSelectionModal({
@@ -267,60 +220,16 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
     );
   }
 
-  Future<void> _selectDateTime() async {
-    final DateTime? pickedDate = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: AppColors.primary,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (pickedDate != null && mounted) {
-      final TimeOfDay? pickedTime = await showTimePicker(
-        context: context,
-        initialTime: TimeOfDay.now(),
-        builder: (context, child) {
-          return Theme(
-            data: Theme.of(context).copyWith(
-              colorScheme: const ColorScheme.light(
-                primary: AppColors.primary,
-              ),
-            ),
-            child: child!,
-          );
-        },
-      );
-
-      if (pickedTime != null && mounted) {
-        final month = pickedDate.month.toString().padLeft(2, '0');
-        final day = pickedDate.day.toString().padLeft(2, '0');
-        final year = pickedDate.year;
-
-        final hourOfPeriod =
-            pickedTime.hour % 12 == 0 ? 12 : pickedTime.hour % 12;
-        final hour = hourOfPeriod.toString().padLeft(2, '0');
-        final minute = pickedTime.minute.toString().padLeft(2, '0');
-        final period = pickedTime.hour >= 12 ? 'PM' : 'AM';
-
-        setState(() {
-          _requestDateTime = '$month/$day/$year $hour:$minute $period';
-          _dateTimeController.text = _requestDateTime;
-        });
-      }
-    }
-  }
-
   Future<void> _onConfirmDetails() async {
+    if (!_isDisclaimerAccepted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please accept the disclaimer before submitting'),
+        ),
+      );
+      return;
+    }
+
     if (_employeeNoController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter Employee Number')),
@@ -331,48 +240,31 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      String? attachmentBase64;
-      if (_attachedFile != null) {
-        if (_attachedFile!.bytes != null) {
-          attachmentBase64 = base64Encode(_attachedFile!.bytes!);
-        } else if (_attachedFile!.path != null) {
-          final fileBytes = await File(_attachedFile!.path!).readAsBytes();
-          attachmentBase64 = base64Encode(fileBytes);
-        }
-      }
-
       final payload = {
         'company': _selectedCompany,
         'employee_number': _employeeNoController.text.trim(),
         'employee_name': _employeeNameController.text.trim(),
         'employee_email': _employeeEmailController.text.trim(),
         'employee_phone': _employeePhoneController.text.trim(),
-        'request_datetime': _dateTimeController.text.trim(),
-        'category': _selectedCategory,
-        'incident_location': _incidentLocationController.text.trim(),
-        'working_location': _selectedWorkingLocation,
-        'is_against_person': _isAgainstPerson,
-        'description': _descriptionController.text.trim(),
-        if (attachmentBase64 != null) 'attachment_base64': attachmentBase64,
-        if (_attachedFile != null) 'attachment_name': _attachedFile!.name,
+        'qid': _qidController.text.trim(),
+        'qid_expiry': _qidExpiryController.text.trim(),
+        'month': _selectedMonth,
+        'disclaimer_confirmed': _isDisclaimerAccepted,
       };
 
-      final response = await AttendanceRepository().submitComplaint(payload);
+      final response =
+          await AttendanceRepository().submitSalarySlipRequest(payload);
 
       if (mounted) {
-        if (response['error'] != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed: ${response['error']}')),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Complaint request submitted successfully!'),
-              backgroundColor: AppColors.primary,
-            ),
-          );
-          Navigator.pop(context);
-        }
+        final msg = response['message']?.toString() ??
+            'Salary slip request submitted successfully!';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+        Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
@@ -419,7 +311,7 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Section 1: EMPLOYEE DETAILS
+                      // EMPLOYEE DETAILS Section
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -481,72 +373,36 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
                               keyboardType: TextInputType.phone,
                             ),
                           ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Section 2: COMPLAINT DETAILS
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildSectionPill('COMPLAINT DETAILS'),
                           const SizedBox(height: 16),
-
-                          // REQUEST DATETIME with separate calendar icon button
                           _buildFieldBlock(
-                            label: 'REQUEST DATETIME',
-                            isRequired: true,
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: _selectDateTime,
-                                    child: AbsorbPointer(
-                                      child: _buildInputField(
-                                        controller: _dateTimeController,
-                                        hintText: 'MM/DD/YYYY HH:MM AM/PM',
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                GestureDetector(
-                                  onTap: _selectDateTime,
-                                  child: Container(
-                                    width: 46,
-                                    height: 46,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: const Color(0xFFE8DFE1),
-                                      ),
-                                    ),
-                                    child: const Icon(
-                                      Icons.calendar_today_outlined,
-                                      color: Color(0xFF1A1310),
-                                      size: 20,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            label: 'QID',
+                            child: _buildInputField(
+                              controller: _qidController,
+                              hintText: 'Auto-filled from profile',
+                              keyboardType: TextInputType.number,
                             ),
                           ),
-
                           const SizedBox(height: 16),
                           _buildFieldBlock(
-                            label: 'COMPLAINT CATEGORY',
+                            label: 'QID EXPIRY',
+                            child: _buildInputField(
+                              controller: _qidExpiryController,
+                              hintText: 'Auto-filled from profile',
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildFieldBlock(
+                            label: 'MONTH',
                             child: _buildDropdownTile(
-                              value: _selectedCategory,
+                              value: _selectedMonth,
                               onTap: () {
                                 _showSelectionModal(
-                                  title: 'Select Complaint Category',
-                                  options: _categories,
-                                  currentValue: _selectedCategory,
+                                  title: 'Select Month',
+                                  options: _months,
+                                  currentValue: _selectedMonth,
                                   onSelected: (val) {
                                     setState(() {
-                                      _selectedCategory = val;
+                                      _selectedMonth = val;
                                     });
                                   },
                                 );
@@ -554,67 +410,32 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          _buildFieldBlock(
-                            label: 'INCIDENT LOCATION',
-                            child: _buildInputField(
-                              controller: _incidentLocationController,
-                              hintText: 'Where did this happen?',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildFieldBlock(
-                            label: 'WORKING LOCATION',
-                            child: _buildDropdownTile(
-                              value: _selectedWorkingLocation,
-                              onTap: () {
-                                if (_workingLocations.isNotEmpty) {
-                                  _showSelectionModal(
-                                    title: 'Select Working Location',
-                                    options: _workingLocations,
-                                    currentValue: _selectedWorkingLocation,
-                                    onSelected: (val) {
-                                      setState(() {
-                                        _selectedWorkingLocation = val;
-                                      });
-                                    },
-                                  );
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 16),
 
-                          // ATTACHMENTS Section
-                          _buildFieldBlock(
-                            label: 'ATTACHMENTS',
-                            child: _buildAttachmentContainer(),
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Against Person Checkbox/Radio Row
+                          // Disclaimer Section
                           GestureDetector(
                             onTap: () {
                               setState(() {
-                                _isAgainstPerson = !_isAgainstPerson;
+                                _isDisclaimerAccepted = !_isDisclaimerAccepted;
                               });
                             },
                             child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Container(
                                   width: 20,
                                   height: 20,
+                                  margin: const EdgeInsets.only(top: 2),
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                      color: _isAgainstPerson
+                                      color: _isDisclaimerAccepted
                                           ? const Color(0xFFC6134B)
                                           : const Color(0xFFCCCCCC),
                                       width: 2,
                                     ),
                                     color: Colors.white,
                                   ),
-                                  child: _isAgainstPerson
+                                  child: _isDisclaimerAccepted
                                       ? Center(
                                           child: Container(
                                             width: 10,
@@ -629,7 +450,7 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
                                 ),
                                 const SizedBox(width: 10),
                                 const Text(
-                                  'Against Person',
+                                  'Disclaimer',
                                   style: TextStyle(
                                     fontFamily: 'Outfit',
                                     fontSize: 13,
@@ -641,48 +462,16 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
                             ),
                           ),
 
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 8),
 
-                          // DESCRIPTION / COMMENTS Section
-                          _buildFieldBlock(
-                            label: 'DESCRIPTION',
-                            child: TextFormField(
-                              controller: _descriptionController,
-                              maxLines: 4,
-                              style: const TextStyle(
-                                fontFamily: 'Outfit',
-                                fontSize: 14,
-                                color: Color(0xFF1A1310),
-                              ),
-                              decoration: InputDecoration(
-                                hintText: 'Add any further details here...',
-                                hintStyle: const TextStyle(
-                                  fontFamily: 'Outfit',
-                                  color: Color(0xFFAAAAAA),
-                                  fontSize: 13,
-                                ),
-                                filled: true,
-                                fillColor: Colors.white,
-                                contentPadding: const EdgeInsets.all(12),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: const BorderSide(
-                                    color: Color(0xFFE8DFE1),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: const BorderSide(
-                                    color: Color(0xFFE8DFE1),
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: const BorderSide(
-                                    color: Color(0xFFC6134B),
-                                  ),
-                                ),
-                              ),
+                          const Text(
+                            'I, the undersigned do hereby understand that as per the Qatar Labor Low, any absence immediately after the period of my leave above without legitimate cause for more than seven consecutive days or fifteen days in one year is tantamount to my termination of service as per the Qatar Labor Law of Article 61 section 9. Furthermore, the quarantine period in my home country for two weeks and/or the Qatar Government for another two more weeks, a total of almost 1 month, are included in my leave period above. In addition to this, I understand that upon my arrival in Qatar, I will able to return to work while completing the quarantine period, the reason why it is included in the leave period. Also, I understand and accept that the company shall book for my hotel quarantine in advance, and in case I will not be able to return to Qatar on the specified date above, I am authorizing the company to deduct from my salary the said equivalent amount of hotel quarantine from my end or service or to any other remunerations due me. Most importantly, upon my return to Qatar, I am obliged to complete and sign all the documents herein, otherwise, this signed leave application shall be considered as an authority for the company to directly deduct the said amount from my salary.',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                              color: Color(0xFF555555),
+                              height: 1.45,
                             ),
                           ),
                         ],
@@ -749,110 +538,6 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildAttachmentContainer() {
-    return GestureDetector(
-      onTap: _pickFile,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFBE7EE),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: _attachedFile == null
-            ? Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFC6134B),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.insert_drive_file_outlined,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Add Attachments',
-                    style: TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1A1310),
-                    ),
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFC6134B),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.insert_drive_file_outlined,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _attachedFile!.name,
-                          style: const TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF1A1310),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${(_attachedFile!.size / 1024).toStringAsFixed(1)} KB',
-                          style: const TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 11,
-                            color: Color(0xFF666666),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: _removeFile,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFFE8DFE1)),
-                      ),
-                      child: const Icon(
-                        Icons.close_rounded,
-                        size: 16,
-                        color: Color(0xFFC6134B),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
       ),
     );
   }
@@ -959,7 +644,6 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
     required TextEditingController controller,
     required String hintText,
     TextInputType keyboardType = TextInputType.text,
-    Widget? suffixIcon,
   }) {
     return TextFormField(
       controller: controller,
@@ -978,7 +662,8 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
         ),
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(
@@ -997,7 +682,6 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
             color: Color(0xFFC6134B),
           ),
         ),
-        suffixIcon: suffixIcon,
       ),
     );
   }
@@ -1049,7 +733,7 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
                 height: 15,
                 child: Center(
                   child: Text(
-                    'COMPLAINT FORM',
+                    'SALARY SLIP',
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     softWrap: false,

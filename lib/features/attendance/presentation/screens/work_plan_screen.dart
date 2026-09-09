@@ -50,11 +50,13 @@ class _WorkPlanScreenState extends State<WorkPlanScreen> {
   final AttendanceRepository _attendanceRepository = AttendanceRepository();
 
   bool _isLoading = true;
+  bool _isInitialLoad = true;
   List<WorkPlanGroup> _workPlanData = [];
   int _workDays = 0;
   int _offDays = 0;
   int _leaveDays = 0;
   double _totalOt = 0.0;
+  String _locationName = '';
 
   late String _selectedMonth;
   late List<String> _months;
@@ -133,16 +135,70 @@ class _WorkPlanScreenState extends State<WorkPlanScreen> {
         endDate: dates?['end_date'],
       );
 
-      final monthPrefix = dates?['start_date'] != null && dates!['start_date']!.length >= 7
-          ? dates['start_date']!.substring(0, 7)
+      final Set<String> availableMonths = {};
+      for (var item in list) {
+        if (item.date.length >= 7) {
+          final dt = DateTime.tryParse(item.date);
+          if (dt != null) {
+            availableMonths.add(_formatMonthYear(dt));
+          }
+        }
+      }
+
+      for (var m in availableMonths) {
+        if (!_months.contains(m)) {
+          _months.add(m);
+        }
+      }
+
+      String monthToUse = _selectedMonth;
+      if (_isInitialLoad && availableMonths.isNotEmpty) {
+        final currentMonthPrefix = dates?['start_date']?.substring(0, 7);
+        final hasCurrentData = list.any((item) => item.date.startsWith(currentMonthPrefix ?? ''));
+        if (!hasCurrentData) {
+          monthToUse = availableMonths.first;
+          _selectedMonth = monthToUse;
+        }
+        _isInitialLoad = false;
+      }
+
+      final targetDates = _getStartAndEndDateForMonth(monthToUse);
+      final monthPrefix = targetDates?['start_date'] != null && targetDates!['start_date']!.length >= 7
+          ? targetDates['start_date']!.substring(0, 7)
           : null;
 
-      final filteredList = list.where((item) {
-        if (monthPrefix == null || item.date.isEmpty) return true;
-        return item.date.startsWith(monthPrefix);
-      }).toList();
+      final displayList = monthPrefix != null
+          ? list.where((item) => item.date.startsWith(monthPrefix)).toList()
+          : list;
 
-      final displayList = filteredList.isNotEmpty ? filteredList : list;
+      // Sort displayList descending by date and workFrom so newest date/day shows on top
+      displayList.sort((a, b) {
+        int cmp = b.date.compareTo(a.date);
+        if (cmp != 0) return cmp;
+        return b.workFrom.compareTo(a.workFrom);
+      });
+
+      String locName = '';
+      for (var item in displayList) {
+        if (item.location.isNotEmpty) {
+          locName = item.location;
+          break;
+        } else if (item.area.isNotEmpty) {
+          locName = item.area;
+          break;
+        }
+      }
+      if (locName.isEmpty) {
+        for (var item in list) {
+          if (item.location.isNotEmpty) {
+            locName = item.location;
+            break;
+          } else if (item.area.isNotEmpty) {
+            locName = item.area;
+            break;
+          }
+        }
+      }
 
       Map<String, List<dynamic>> groupsMap = {};
       int workDays = 0;
@@ -229,6 +285,7 @@ class _WorkPlanScreenState extends State<WorkPlanScreen> {
       });
 
       setState(() {
+        _locationName = locName;
         _workDays = workDays;
         _offDays = offDays;
         _leaveDays = leaveDays;
@@ -392,15 +449,21 @@ class _WorkPlanScreenState extends State<WorkPlanScreen> {
                             color: Color(0xFF5E5855),
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            StorageService.getValue(StorageService.keyCompanyName).isNotEmpty
-                                ? StorageService.getValue(StorageService.keyCompanyName)
-                                : 'Work Location',
-                            style: const TextStyle(
-                              fontFamily: 'Outfit',
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1A1310),
+                          Expanded(
+                            child: Text(
+                              _locationName.isNotEmpty
+                                  ? _locationName
+                                  : (StorageService.getValue(StorageService.keyCompanyName).isNotEmpty
+                                      ? StorageService.getValue(StorageService.keyCompanyName)
+                                      : 'Work Location'),
+                              style: const TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1A1310),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],

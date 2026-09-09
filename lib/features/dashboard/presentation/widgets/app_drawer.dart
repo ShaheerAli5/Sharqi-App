@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -24,12 +25,12 @@ class AppDrawer extends StatelessWidget {
     final isNotificationsSelected = currentRoute == AppRoutes.notifications;
 
     return Drawer(
-      width: screenWidth, // Full width drawer as shown in design
+      width: screenWidth,
       backgroundColor: AppColors.background,
       elevation: 0,
       child: Column(
         children: [
-          // Top Burgundy Header Container (Frame 43: Fill 354px x Hug 173px)
+          // Top Burgundy Header Container
           _buildHeader(context),
 
           // Main Cream Body Container
@@ -37,7 +38,7 @@ class AppDrawer extends StatelessWidget {
             child: Container(
               width: double.infinity,
               decoration: const BoxDecoration(
-                color: Color(0xFFFBF6F3), // Exact Hex: #FBF6F3
+                color: Color(0xFFFBF6F3),
                 borderRadius: BorderRadius.vertical(
                   top: Radius.circular(24),
                 ),
@@ -183,7 +184,7 @@ class AppDrawer extends StatelessWidget {
                         ),
                       ),
 
-                      // button.btn-primary: LOGOUT Button
+                      // LOGOUT Button
                       SizedBox(
                         width: double.infinity,
                         height: 48,
@@ -192,12 +193,12 @@ class AppDrawer extends StatelessWidget {
                             Navigator.pushNamedAndRemoveUntil(
                               context,
                               AppRoutes.signIn,
-                                  (route) => false,
+                              (route) => false,
                             );
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor:
-                            const Color(0xFFC6134B).withValues(alpha: 0.08),
+                                const Color(0xFFC6134B).withValues(alpha: 0.08),
                             elevation: 0,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 1),
@@ -243,12 +244,61 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
+  Widget _buildDrawerProfileImage(String profileImg) {
+    if (profileImg.isEmpty) {
+      return const Icon(
+        Icons.person_outline_rounded,
+        color: Colors.white,
+        size: 28,
+      );
+    }
+
+    try {
+      if (profileImg.startsWith('http://') ||
+          profileImg.startsWith('https://')) {
+        return Image.network(
+          profileImg,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => const Icon(
+            Icons.person_outline_rounded,
+            color: Colors.white,
+            size: 28,
+          ),
+        );
+      }
+
+      String cleanBase64 = profileImg;
+      if (cleanBase64.contains(',')) {
+        cleanBase64 = cleanBase64.split(',').last;
+      }
+      cleanBase64 = cleanBase64.replaceAll(RegExp(r'\s+'), '');
+
+      final bytes = base64Decode(cleanBase64);
+      return Image.memory(
+        bytes,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => const Icon(
+          Icons.person_outline_rounded,
+          color: Colors.white,
+          size: 28,
+        ),
+      );
+    } catch (_) {
+      return const Icon(
+        Icons.person_outline_rounded,
+        color: Colors.white,
+        size: 28,
+      );
+    }
+  }
+
   Widget _buildHeader(BuildContext context) {
     final fullName = StorageService.getValue(StorageService.keyFullName);
     final phone = StorageService.getValue(StorageService.keyPhone);
     final whatsapp = StorageService.getValue(StorageService.keyWhatsAppData);
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
     final companyName = StorageService.getValue(StorageService.keyCompanyName);
+    final profileImg = StorageService.getValue(StorageService.keyProfileImage);
 
     return Container(
       width: double.infinity,
@@ -294,7 +344,7 @@ class AppDrawer extends StatelessWidget {
 
               const SizedBox(height: 4),
 
-              // Frame 42: Avatar + Name & Phone/WhatsApp Chips Row
+              // Avatar + Name & Phone/WhatsApp Chips Row
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -306,10 +356,8 @@ class AppDrawer extends StatelessWidget {
                       shape: BoxShape.circle,
                       color: Colors.white.withValues(alpha: 0.22),
                     ),
-                    child: const Icon(
-                      Icons.person_outline_rounded,
-                      color: Colors.white,
-                      size: 28,
+                    child: ClipOval(
+                      child: _buildDrawerProfileImage(profileImg),
                     ),
                   ),
 
@@ -466,7 +514,6 @@ class AppDrawer extends StatelessWidget {
   }
 }
 
-// button.nav-item
 class _DrawerMenuItem extends StatelessWidget {
   final String assetPath;
   final String label;
@@ -483,9 +530,9 @@ class _DrawerMenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final backgroundColor =
-    isSelected ? const Color(0xFFFBE7EE) : Colors.transparent;
+        isSelected ? const Color(0xFFFBE7EE) : Colors.transparent;
     final textColor =
-    isSelected ? const Color(0xFFC6134B) : const Color(0xFF1A1310);
+        isSelected ? const Color(0xFFC6134B) : const Color(0xFF1A1310);
 
     return GestureDetector(
       onTap: onTap,

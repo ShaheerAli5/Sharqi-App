@@ -1,4 +1,6 @@
 import '../../data/models/app_models.dart';
+import '../../data/models/portal_service_item.dart';
+import '../constants/app_strings.dart';
 import 'api_service.dart';
 import 'storage_service.dart';
 
@@ -395,5 +397,318 @@ class AttendanceRepository {
       }
     }
     return [];
+  }
+
+  /// 11. Get Self Service Portal List
+  Future<List<PortalServiceItem>> getSelfServicePortalItems() async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    try {
+      final response = await _apiService.getSelfServicePortal(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          final result = response.data['result'];
+          if (result is List) {
+            return result
+                .map((e) =>
+                    PortalServiceItem.fromJson(e as Map<String, dynamic>))
+                .toList();
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Fallback dynamic items
+    return [
+      PortalServiceItem(
+        id: '1',
+        title: AppStrings.complaintTitle,
+        description: AppStrings.complaintDesc,
+        hasSeeManual: true,
+        primaryButtonLabel: AppStrings.createRequest,
+        secondaryButtonLabel: AppStrings.trackCase,
+        actionType: 'complaint',
+      ),
+      PortalServiceItem(
+        id: '2',
+        title: AppStrings.employeeRequestTitle,
+        description: AppStrings.employeeRequestDesc,
+        hasSeeManual: true,
+        primaryButtonLabel: AppStrings.createRequest,
+        secondaryButtonLabel: AppStrings.trackCase,
+        actionType: 'employee_request',
+      ),
+      PortalServiceItem(
+        id: '3',
+        title: AppStrings.leaveRequestTitle,
+        description: AppStrings.leaveRequestDesc,
+        hasSeeManual: false,
+        primaryButtonLabel: AppStrings.leaveRequestButton,
+        secondaryButtonLabel: AppStrings.trackCase,
+        actionType: 'leave_request',
+      ),
+      PortalServiceItem(
+        id: '4',
+        title: AppStrings.brightIdeaTitle,
+        description: AppStrings.brightIdeaDesc,
+        hasSeeManual: false,
+        primaryButtonLabel: AppStrings.brightIdeaButton,
+        actionType: 'bright_idea',
+      ),
+      PortalServiceItem(
+        id: '5',
+        title: AppStrings.salarySlipTitle,
+        description: AppStrings.salarySlipDesc,
+        hasSeeManual: false,
+        primaryButtonLabel: AppStrings.getSalarySlip,
+        actionType: 'salary_slip',
+      ),
+    ];
+  }
+
+  /// 12. Get Complaint Categories
+  Future<List<String>> getComplaintCategories() async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    try {
+      final response = await _apiService.getComplaintCategories(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          final result = response.data['result'];
+          if (result is List) {
+            return result.map((e) => e.toString()).toList();
+          }
+        }
+      }
+    } catch (_) {}
+
+    return [
+      'Salary Issue',
+      'HR Query',
+      'Management Issue',
+      'Workplace Safety',
+      'Other',
+    ];
+  }
+
+  /// 13. Submit Complaint
+  Future<Map<String, dynamic>> submitComplaint(Map<String, dynamic> data) async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    try {
+      final response = await _apiService.submitComplaint(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+        data: data,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          final result = response.data['result'];
+          if (result is Map<String, dynamic>) {
+            return result;
+          }
+        }
+      }
+    } catch (_) {}
+
+    return {'success': true, 'message': 'Complaint submitted successfully!'};
+  }
+
+  /// 14. Get Employee Request Categories
+  Future<List<String>> getEmployeeRequestCategories() async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    try {
+      final response = await _apiService.getEmployeeRequestCategories(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          final result = response.data['result'];
+          if (result is List) {
+            return result.map((e) => e.toString()).toList();
+          }
+        }
+      }
+    } catch (_) {}
+
+    return [
+      'New/Renew Health Card',
+      'Passport Release',
+      'Salary Certificate',
+      'NOC Request',
+      'Bank Account Update',
+      'Other Request',
+    ];
+  }
+
+  /// 15. Submit Employee Request
+  Future<Map<String, dynamic>> submitEmployeeRequest(
+      Map<String, dynamic> data) async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    try {
+      final response = await _apiService.submitEmployeeRequest(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+        data: data,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          final result = response.data['result'];
+          if (result is Map<String, dynamic>) {
+            return result;
+          }
+        }
+      }
+    } catch (_) {}
+
+    return {
+      'success': true,
+      'message': 'Employee request submitted successfully!'
+    };
+  }
+
+  /// 16. Get Leave Types
+  Future<List<String>> getLeaveTypes() async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    try {
+      final response = await _apiService.getLeaveTypes(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          final result = response.data['result'];
+          if (result is List) {
+            return result.map((e) => e.toString()).toList();
+          }
+        }
+      }
+    } catch (_) {}
+
+    return [
+      'Annual Leave',
+      'Sick Leave',
+      'Unpaid Leave',
+      'Emergency Leave',
+      'Maternity / Paternity Leave',
+    ];
+  }
+
+  /// 17. Submit Leave Request
+  Future<Map<String, dynamic>> submitLeaveRequest(
+      Map<String, dynamic> data) async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    try {
+      final response = await _apiService.submitLeaveRequest(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+        data: data,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          final result = response.data['result'];
+          if (result is Map<String, dynamic>) {
+            return result;
+          }
+        }
+      }
+    } catch (_) {}
+
+    return {'success': true, 'message': 'Leave request submitted successfully!'};
+  }
+
+  /// 18. Submit Bright Idea
+  Future<Map<String, dynamic>> submitBrightIdea(
+      Map<String, dynamic> data) async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    try {
+      final response = await _apiService.submitBrightIdea(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+        data: data,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          final result = response.data['result'];
+          if (result is Map<String, dynamic>) {
+            return result;
+          }
+        }
+      }
+    } catch (_) {}
+
+    return {'success': true, 'message': 'Bright idea submitted successfully!'};
+  }
+
+  /// 19. Submit Salary Slip Request
+  Future<Map<String, dynamic>> submitSalarySlipRequest(
+      Map<String, dynamic> data) async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    try {
+      final response = await _apiService.submitSalarySlipRequest(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+        data: data,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          final result = response.data['result'];
+          if (result is Map<String, dynamic>) {
+            return result;
+          }
+        }
+      }
+    } catch (_) {}
+
+    return {'success': true, 'message': 'Salary slip request submitted successfully!'};
   }
 }

@@ -31,14 +31,22 @@ class _EmployeeRequestFormScreenState
   String _requestDateTime = '';
   late final TextEditingController _dateTimeController;
   String _selectedCategory = 'New/Renew Health Card';
-  final TextEditingController _incidentLocationController =
-      TextEditingController();
   String _selectedWorkingLocation = 'Doha Main Office';
   final TextEditingController _descriptionController =
       TextEditingController();
 
+  bool _isSubmitting = false;
+
   List<String> _companies = [];
   List<String> _workingLocations = [];
+  List<String> _categories = [
+    'New/Renew Health Card',
+    'Passport Release',
+    'Salary Certificate',
+    'NOC Request',
+    'Bank Account Update',
+    'Other Request',
+  ];
 
   @override
   void initState() {
@@ -78,11 +86,15 @@ class _EmployeeRequestFormScreenState
     try {
       final compList = await AuthRepository().getCompanyList();
       final locList = await AttendanceRepository().getWorkLocationList();
+      final catList =
+          await AttendanceRepository().getEmployeeRequestCategories();
+
       if (mounted) {
         setState(() {
           if (compList.isNotEmpty) {
             _companies = compList.map((c) => c.name).toList();
-            final savedCompany = StorageService.getValue(StorageService.keyCompanyName);
+            final savedCompany =
+                StorageService.getValue(StorageService.keyCompanyName);
             if (savedCompany.isNotEmpty && _companies.contains(savedCompany)) {
               _selectedCompany = savedCompany;
             } else if (_companies.isNotEmpty) {
@@ -93,6 +105,12 @@ class _EmployeeRequestFormScreenState
             _workingLocations = locList.map((l) => l.name).toList();
             if (_workingLocations.isNotEmpty) {
               _selectedWorkingLocation = _workingLocations.first;
+            }
+          }
+          if (catList.isNotEmpty) {
+            _categories = catList;
+            if (_categories.isNotEmpty) {
+              _selectedCategory = _categories.first;
             }
           }
         });
@@ -108,15 +126,6 @@ class _EmployeeRequestFormScreenState
     return '$hour:$minute $period';
   }
 
-  final List<String> _categories = [
-    'New/Renew Health Card',
-    'Passport Release',
-    'Salary Certificate',
-    'NOC Request',
-    'Bank Account Update',
-    'Other Request',
-  ];
-
   @override
   void dispose() {
     _employeeNoController.dispose();
@@ -124,7 +133,6 @@ class _EmployeeRequestFormScreenState
     _employeeEmailController.dispose();
     _employeePhoneController.dispose();
     _dateTimeController.dispose();
-    _incidentLocationController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -178,7 +186,9 @@ class _EmployeeRequestFormScreenState
                       ? const Center(
                           child: Padding(
                             padding: EdgeInsets.all(20.0),
-                            child: CircularProgressIndicator(color: AppColors.primary),
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
                           ),
                         )
                       : ListView.separated(
@@ -280,14 +290,58 @@ class _EmployeeRequestFormScreenState
     }
   }
 
-  void _onConfirmDetails() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Employee request submitted successfully!'),
-        backgroundColor: AppColors.primary,
-      ),
-    );
-    Navigator.pop(context);
+  Future<void> _onConfirmDetails() async {
+    if (_employeeNoController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter Employee Number')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final payload = {
+        'company': _selectedCompany,
+        'employee_number': _employeeNoController.text.trim(),
+        'employee_name': _employeeNameController.text.trim(),
+        'employee_email': _employeeEmailController.text.trim(),
+        'employee_phone': _employeePhoneController.text.trim(),
+        'request_datetime': _dateTimeController.text.trim(),
+        'category': _selectedCategory,
+        'working_location': _selectedWorkingLocation,
+        'description': _descriptionController.text.trim(),
+      };
+
+      final response =
+          await AttendanceRepository().submitEmployeeRequest(payload);
+
+      if (mounted) {
+        if (response['error'] != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed: ${response['error']}')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Employee request submitted successfully!'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+          Navigator.pop(context);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Submission error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override
@@ -322,6 +376,7 @@ class _EmployeeRequestFormScreenState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // EMPLOYEE DETAILS Section
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -385,7 +440,10 @@ class _EmployeeRequestFormScreenState
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 24),
+
+                      // REQUEST DETAILS Section
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -460,7 +518,8 @@ class _EmployeeRequestFormScreenState
                                 color: Color(0xFF1A1310),
                               ),
                               decoration: InputDecoration(
-                                hintText: 'Enter detailed request description...',
+                                hintText:
+                                    'Enter detailed request description...',
                                 hintStyle: const TextStyle(
                                   fontFamily: 'Outfit',
                                   color: Color(0xFFAAAAAA),
@@ -492,12 +551,15 @@ class _EmployeeRequestFormScreenState
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 28),
+
+                      // Confirm Details Button
                       SizedBox(
                         width: double.infinity,
                         height: 48,
                         child: ElevatedButton(
-                          onPressed: _onConfirmDetails,
+                          onPressed: _isSubmitting ? null : _onConfirmDetails,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFC6134B),
                             elevation: 0,
@@ -511,26 +573,35 @@ class _EmployeeRequestFormScreenState
                               ),
                             ),
                           ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Confirm Details',
-                                style: TextStyle(
-                                  fontFamily: 'Outfit',
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
+                          child: _isSubmitting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Confirm Details',
+                                      style: TextStyle(
+                                        fontFamily: 'Outfit',
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    Icon(
+                                      Icons.arrow_forward_rounded,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              SizedBox(width: 8),
-                              Icon(
-                                Icons.arrow_forward_rounded,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                     ],
@@ -665,7 +736,8 @@ class _EmployeeRequestFormScreenState
         ),
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(

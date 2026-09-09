@@ -141,6 +141,13 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
         endDate: dates?['end_date'],
       );
 
+      // Sort records by date and start time in descending order (newest date/day on top)
+      list.sort((a, b) {
+        int cmp = b.date.compareTo(a.date);
+        if (cmp != 0) return cmp;
+        return b.sTime.compareTo(a.sTime);
+      });
+
       final monthPrefix = dates?['start_date'] != null && dates!['start_date']!.length >= 7
           ? dates['start_date']!.substring(0, 7)
           : null;

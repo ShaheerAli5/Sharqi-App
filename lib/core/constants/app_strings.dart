@@ -29,6 +29,7 @@ class AppStrings {
   static const String resendCode = 'Resend code';
   static const String verifyAndContinue = 'Verify and continue';
   static const String sessionEncryptedNotice = 'Your session is encrypted end-to-end';
+  static const String otpTimeoutMessage = 'Verification time expired. Please sign in again.';
 
   static const String homeTitle = 'Home';
 

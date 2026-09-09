@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../core/services/attendance_repository.dart';
+import '../../../../data/models/portal_service_item.dart';
 import '../../../../routes/app_routes.dart';
 import '../../../dashboard/presentation/widgets/app_drawer.dart';
 import 'track_case_screen.dart';
@@ -16,6 +18,105 @@ class SelfServicePortalScreen extends StatefulWidget {
 
 class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final AttendanceRepository _attendanceRepository = AttendanceRepository();
+
+  bool _isLoading = true;
+  List<PortalServiceItem> _portalItems = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPortalItems();
+  }
+
+  Future<void> _fetchPortalItems() async {
+    setState(() => _isLoading = true);
+    try {
+      final items = await _attendanceRepository.getSelfServicePortalItems();
+      if (mounted) {
+        setState(() {
+          _portalItems = items;
+        });
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  IconData _getIconForAction(String actionType) {
+    switch (actionType) {
+      case 'complaint':
+        return Icons.add_rounded;
+      case 'employee_request':
+        return Icons.group_outlined;
+      case 'leave_request':
+        return Icons.calendar_month_outlined;
+      case 'bright_idea':
+        return Icons.lightbulb_outline_rounded;
+      case 'salary_slip':
+        return Icons.article_outlined;
+      default:
+        return Icons.grid_view_rounded;
+    }
+  }
+
+  IconData _getPrimaryIconForAction(String actionType) {
+    switch (actionType) {
+      case 'complaint':
+        return Icons.add_rounded;
+      case 'employee_request':
+        return Icons.group_outlined;
+      case 'leave_request':
+        return Icons.calendar_today_rounded;
+      case 'bright_idea':
+        return Icons.lightbulb_outline_rounded;
+      case 'salary_slip':
+        return Icons.article_outlined;
+      default:
+        return Icons.arrow_forward_rounded;
+    }
+  }
+
+  VoidCallback _getPrimaryAction(BuildContext context, String actionType) {
+    switch (actionType) {
+      case 'complaint':
+        return () => Navigator.pushNamed(context, AppRoutes.complaintForm);
+      case 'employee_request':
+        return () =>
+            Navigator.pushNamed(context, AppRoutes.employeeRequestForm);
+      case 'leave_request':
+        return () => Navigator.pushNamed(context, AppRoutes.leaveRequestForm);
+      case 'bright_idea':
+        return () => Navigator.pushNamed(context, AppRoutes.brightIdeaForm);
+      case 'salary_slip':
+        return () => Navigator.pushNamed(context, AppRoutes.salarySlip);
+      default:
+        return () {};
+    }
+  }
+
+  VoidCallback? _getSecondaryAction(BuildContext context, String actionType) {
+    switch (actionType) {
+      case 'complaint':
+      case 'employee_request':
+        return () => Navigator.pushNamed(context, AppRoutes.trackCase);
+      case 'leave_request':
+        return () => Navigator.pushNamed(
+              context,
+              AppRoutes.trackCase,
+              arguments: const TrackCaseArguments(
+                labelText: 'LEAVE CODE',
+                hintText: '',
+                buttonText: 'Search Leave',
+              ),
+            );
+      default:
+        return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,140 +142,73 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
             child: Container(
               width: double.infinity,
               decoration: const BoxDecoration(
-                color: Color(0xFFFBF6F3), // Exact Hex: #FBF6F3
+                color: Color(0xFFFBF6F3),
                 borderRadius: BorderRadius.vertical(
                   top: Radius.circular(24),
                 ),
               ),
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20.0,
-                  vertical: 24.0,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Subtitle Intro Text (Fill 354px x Hug 41px, Font Outfit, Size 14px, Weight 400, LineHeight 20.3px, LetterSpacing -0.14px)
-                    const SizedBox(
-                      width: double.infinity,
-                      child: Text(
-                        AppStrings.portalIntroSubtitle,
-                        style: TextStyle(
-                          fontFamily: 'Outfit',
-                          fontSize: 14, // Exact Size: 14px
-                          fontWeight: FontWeight.w400, // Exact Weight: 400 Regular
-                          color: Color(0xFF1A1310), // Exact Hex: #1A1310
-                          height: 20.3 / 14, // Exact Line Height: 20.3px
-                          letterSpacing: -0.14, // Exact Letter Spacing: -0.14px
-                        ),
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    )
+                  : SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20.0,
+                        vertical: 24.0,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(
+                            width: double.infinity,
+                            child: Text(
+                              AppStrings.portalIntroSubtitle,
+                              style: TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                                color: Color(0xFF1A1310),
+                                height: 20.3 / 14,
+                                letterSpacing: -0.14,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _portalItems.length,
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(height: 14),
+                            itemBuilder: (context, index) {
+                              final item = _portalItems[index];
+                              return _PortalServiceCard(
+                                icon: _getIconForAction(item.actionType),
+                                imageUrl: item.imageUrl,
+                                title: item.title,
+                                description: item.description,
+                                hasSeeManual: item.hasSeeManual,
+                                primaryButtonLabel: item.primaryButtonLabel,
+                                primaryButtonIcon:
+                                    _getPrimaryIconForAction(item.actionType),
+                                secondaryButtonLabel:
+                                    item.secondaryButtonLabel,
+                                secondaryButtonIcon:
+                                    item.secondaryButtonLabel != null
+                                        ? Icons.search_rounded
+                                        : null,
+                                onPrimaryTap: _getPrimaryAction(
+                                    context, item.actionType),
+                                onSecondaryTap: _getSecondaryAction(
+                                    context, item.actionType),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 24),
+                        ],
                       ),
                     ),
-
-                    const SizedBox(height: 18),
-
-                    // div.ssp-list: Cards List (Fixed 354px, Gap 14px)
-                    // Card 1: COMPLAINT
-                    _PortalServiceCard(
-                      icon: Icons.add_rounded,
-                      title: AppStrings.complaintTitle,
-                      description: AppStrings.complaintDesc,
-                      hasSeeManual: true,
-                      primaryButtonLabel: AppStrings.createRequest,
-                      primaryButtonIcon: Icons.add_rounded,
-                      secondaryButtonLabel: AppStrings.trackCase,
-                      secondaryButtonIcon: Icons.search_rounded,
-                      onPrimaryTap: () {
-                        Navigator.pushNamed(context, AppRoutes.complaintForm);
-                      },
-                      onSecondaryTap: () {
-                        Navigator.pushNamed(context, AppRoutes.trackCase);
-                      },
-                    ),
-
-                    const SizedBox(height: 14), // Exact Gap: 14px
-
-                    // Card 2: EMPLOYEE REQUEST
-                    _PortalServiceCard(
-                      icon: Icons.group_outlined,
-                      title: AppStrings.employeeRequestTitle,
-                      description: AppStrings.employeeRequestDesc,
-                      hasSeeManual: true,
-                      primaryButtonLabel: AppStrings.createRequest,
-                      primaryButtonIcon: Icons.group_outlined,
-                      secondaryButtonLabel: AppStrings.trackCase,
-                      secondaryButtonIcon: Icons.search_rounded,
-                      onPrimaryTap: () {
-                        Navigator.pushNamed(
-                            context, AppRoutes.employeeRequestForm);
-                      },
-                      onSecondaryTap: () {
-                        Navigator.pushNamed(context, AppRoutes.trackCase);
-                      },
-                    ),
-
-                    const SizedBox(height: 14), // Exact Gap: 14px
-
-                    // Card 3: LEAVE REQUEST
-                    _PortalServiceCard(
-                      icon: Icons.calendar_month_outlined,
-                      title: AppStrings.leaveRequestTitle,
-                      description: AppStrings.leaveRequestDesc,
-                      hasSeeManual: false,
-                      primaryButtonLabel: AppStrings.leaveRequestButton,
-                      primaryButtonIcon: Icons.calendar_today_rounded,
-                      secondaryButtonLabel: AppStrings.trackCase,
-                      secondaryButtonIcon: Icons.search_rounded,
-                      onPrimaryTap: () {
-                        Navigator.pushNamed(
-                            context, AppRoutes.leaveRequestForm);
-                      },
-                      onSecondaryTap: () {
-                        Navigator.pushNamed(
-                          context,
-                          AppRoutes.trackCase,
-                          arguments: const TrackCaseArguments(
-                            labelText: 'LEAVE CODE',
-                            hintText: '',
-                            buttonText: 'Search Leave',
-                          ),
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 14), // Exact Gap: 14px
-
-                    // Card 4: BRIGHT IDEA
-                    _PortalServiceCard(
-                      icon: Icons.lightbulb_outline_rounded,
-                      title: AppStrings.brightIdeaTitle,
-                      description: AppStrings.brightIdeaDesc,
-                      hasSeeManual: false,
-                      primaryButtonLabel: AppStrings.brightIdeaButton,
-                      primaryButtonIcon: Icons.lightbulb_outline_rounded,
-                      onPrimaryTap: () {
-                        Navigator.pushNamed(
-                            context, AppRoutes.brightIdeaForm);
-                      },
-                    ),
-
-                    const SizedBox(height: 14), // Exact Gap: 14px
-
-                    // Card 5: SALARY SLIP
-                    _PortalServiceCard(
-                      icon: Icons.article_outlined,
-                      title: AppStrings.salarySlipTitle,
-                      description: AppStrings.salarySlipDesc,
-                      hasSeeManual: false,
-                      primaryButtonLabel: AppStrings.getSalarySlip,
-                      primaryButtonIcon: Icons.article_outlined,
-                      onPrimaryTap: () {},
-                    ),
-
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
             ),
           ),
         ],
@@ -205,7 +239,6 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Open menu button (Fixed 44px x 44px, Radius 13px, Padding 1px 6px 1px 6px, Color #FFFFFF 14%)
               Align(
                 alignment: Alignment.centerLeft,
                 child: GestureDetector(
@@ -213,12 +246,12 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
                     _scaffoldKey.currentState?.openDrawer();
                   },
                   child: Container(
-                    width: 44, // Exact Width: 44px
-                    height: 44, // Exact Height: 44px
-                    padding: const EdgeInsets.fromLTRB(6, 1, 6, 1), // Exact Padding: 1px 6px 1px 6px
+                    width: 44,
+                    height: 44,
+                    padding: const EdgeInsets.fromLTRB(6, 1, 6, 1),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.14), // Exact Color: #FFFFFF 14%
-                      borderRadius: BorderRadius.circular(13), // Exact Radius: 13px
+                      color: Colors.white.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(13),
                     ),
                     child: const Icon(
                       Icons.menu_rounded,
@@ -228,8 +261,6 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
                   ),
                 ),
               ),
-
-              // Title Text: "SELF SERVICE PORTAL" (Size 12px, Weight 600 SemiBold, Letter spacing 1.68px, Single Line)
               const SizedBox(
                 height: 15,
                 child: Center(
@@ -241,10 +272,10 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
                     style: TextStyle(
                       fontFamily: 'Outfit',
                       color: Colors.white,
-                      fontSize: 12, // Exact Size: 12px
-                      fontWeight: FontWeight.w600, // Exact Weight: 600 SemiBold
-                      letterSpacing: 1.68, // Exact Letter Spacing: 1.68px
-                      height: 1.0, // Exact Line Height: 100%
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.68,
+                      height: 1.0,
                     ),
                   ),
                 ),
@@ -257,9 +288,9 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
   }
 }
 
-// div.ssp-card: Fixed 354px x Hug 137.59px, Radii TL18 TR18 BR18 BL6, Padding 16px, Gap 16px, Color #FFFFFF
 class _PortalServiceCard extends StatelessWidget {
   final IconData icon;
+  final String? imageUrl;
   final String title;
   final String description;
   final bool hasSeeManual;
@@ -272,6 +303,7 @@ class _PortalServiceCard extends StatelessWidget {
 
   const _PortalServiceCard({
     required this.icon,
+    this.imageUrl,
     required this.title,
     required this.description,
     this.hasSeeManual = false,
@@ -287,59 +319,64 @@ class _PortalServiceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16.0), // Exact Padding: 16px
+      padding: const EdgeInsets.all(16.0),
       decoration: const BoxDecoration(
-        color: Colors.white, // Exact Color: #FFFFFF
+        color: Colors.white,
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(18), // Exact TL: 18px
-          topRight: Radius.circular(18), // Exact TR: 18px
-          bottomRight: Radius.circular(18), // Exact BR: 18px
-          bottomLeft: Radius.circular(6), // Exact BL: 6px
+          topLeft: Radius.circular(18),
+          topRight: Radius.circular(18),
+          bottomRight: Radius.circular(18),
+          bottomLeft: Radius.circular(6),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Frame 45: Content Frame (Fill 322px x Hug 55.59px, Gap 8px)
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Frame 44: Header Row (Fill 322px x Hug 28px, Gap 10px)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Soft pink icon badge
                   Container(
                     width: 28,
                     height: 28,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFCE8EE), // Soft pink badge
+                      color: const Color(0xFFFCE8EE),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(
-                      icon,
-                      size: 16,
-                      color: const Color(0xFFC6134B), // Burgundy maroon
-                    ),
+                    child: imageUrl != null && imageUrl!.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              imageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Icon(
+                                icon,
+                                size: 16,
+                                color: const Color(0xFFC6134B),
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            icon,
+                            size: 16,
+                            color: const Color(0xFFC6134B),
+                          ),
                   ),
-
-                  const SizedBox(width: 10), // Exact Gap: 10px
-
-                  // Title Text: Complaint (Width 211px x Height 18px, Font Outfit, Size 14px, Weight 500 Medium)
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       title,
                       style: const TextStyle(
                         fontFamily: 'Outfit',
-                        fontSize: 14, // Exact Size: 14px
-                        fontWeight: FontWeight.w500, // Exact Weight: 500 Medium
-                        color: Color(0xFF1A1310), // Exact Hex: #1A1310
-                        height: 1.0, // Exact Line Height: 100% (18px)
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF1A1310),
+                        height: 1.0,
                       ),
                     ),
                   ),
-
-                  // See Manual text button (Width 63px x Height 15px, Font Outfit, Size 12px, Weight 600 SemiBold, Color #8A5A10)
                   if (hasSeeManual)
                     GestureDetector(
                       onTap: () {},
@@ -347,19 +384,16 @@ class _PortalServiceCard extends StatelessWidget {
                         AppStrings.seeManual,
                         style: TextStyle(
                           fontFamily: 'Outfit',
-                          fontSize: 12, // Exact Size: 12px
-                          fontWeight: FontWeight.w600, // Exact Weight: 600 SemiBold
-                          color: Color(0xFF8A5A10), // Exact Hex: #8A5A10
-                          height: 1.0, // Exact Line Height: 100% (15px)
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF8A5A10),
+                          height: 1.0,
                         ),
                       ),
                     ),
                 ],
               ),
-
-              const SizedBox(height: 8), // Exact Gap: 8px
-
-              // Description Text
+              const SizedBox(height: 8),
               Text(
                 description,
                 style: const TextStyle(
@@ -371,25 +405,22 @@ class _PortalServiceCard extends StatelessWidget {
               ),
             ],
           ),
-
-          const SizedBox(height: 16), // Exact Gap: 16px
-
-          // div.ssp-btn-row: Action Buttons Row (Fill 322px x Hug 34px, Gap 8px)
+          const SizedBox(height: 16),
           Row(
             children: [
-              // Primary Button (Hug 143px x Hug 34px, Radii TL10 TR10 BR10 BL4, Padding 8px 12px 8px 12px, Gap 6px, Color #C6134B)
               GestureDetector(
                 onTap: onPrimaryTap,
                 child: Container(
-                  height: 34, // Exact Height: Hug (34px)
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Exact Padding: 8px 12px 8px 12px
+                  height: 34,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: const BoxDecoration(
-                    color: Color(0xFFC6134B), // Exact Color: #C6134B
+                    color: Color(0xFFC6134B),
                     borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(10), // Exact TL: 10px
-                      topRight: Radius.circular(10), // Exact TR: 10px
-                      bottomRight: Radius.circular(10), // Exact BR: 10px
-                      bottomLeft: Radius.circular(4), // Exact BL: 4px
+                      topLeft: Radius.circular(10),
+                      topRight: Radius.circular(10),
+                      bottomRight: Radius.circular(10),
+                      bottomLeft: Radius.circular(4),
                     ),
                   ),
                   child: Row(
@@ -400,7 +431,7 @@ class _PortalServiceCard extends StatelessWidget {
                         size: 16,
                         color: Colors.white,
                       ),
-                      const SizedBox(width: 6), // Exact Gap: 6px
+                      const SizedBox(width: 6),
                       Text(
                         primaryButtonLabel,
                         style: const TextStyle(
@@ -415,23 +446,21 @@ class _PortalServiceCard extends StatelessWidget {
                   ),
                 ),
               ),
-
               if (secondaryButtonLabel != null) ...[
-                const SizedBox(width: 8), // Exact Gap: 8px
-
-                // Secondary Button (Hug 115px x Hug 34px, Radii TL10 TR10 BR10 BL4, Padding 8px 12px 8px 12px, Gap 6px, Color #FBE7EE)
+                const SizedBox(width: 8),
                 GestureDetector(
                   onTap: onSecondaryTap,
                   child: Container(
-                    height: 34, // Exact Height: Hug (34px)
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Exact Padding: 8px 12px 8px 12px
+                    height: 34,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: const BoxDecoration(
-                      color: Color(0xFFFBE7EE), // Exact Hex: #FBE7EE
+                      color: Color(0xFFFBE7EE),
                       borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(10), // Exact TL: 10px
-                        topRight: Radius.circular(10), // Exact TR: 10px
-                        bottomRight: Radius.circular(10), // Exact BR: 10px
-                        bottomLeft: Radius.circular(4), // Exact BL: 4px
+                        topLeft: Radius.circular(10),
+                        topRight: Radius.circular(10),
+                        bottomRight: Radius.circular(10),
+                        bottomLeft: Radius.circular(4),
                       ),
                     ),
                     child: Row(
@@ -443,7 +472,7 @@ class _PortalServiceCard extends StatelessWidget {
                             size: 16,
                             color: const Color(0xFFC6134B),
                           ),
-                          const SizedBox(width: 6), // Exact Gap: 6px
+                          const SizedBox(width: 6),
                         ],
                         Text(
                           secondaryButtonLabel!,
@@ -451,7 +480,7 @@ class _PortalServiceCard extends StatelessWidget {
                             fontFamily: 'Outfit',
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFFC6134B), // Exact Color: #C6134B
+                            color: Color(0xFFC6134B),
                             height: 1.0,
                           ),
                         ),

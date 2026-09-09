@@ -44,10 +44,20 @@ class _VerificationScreenState extends State<VerificationScreen> {
           _secondsRemaining--;
         });
       } else {
-        setState(() {
-          _canResend = true;
-        });
         timer.cancel();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(AppStrings.otpTimeoutMessage),
+              duration: Duration(seconds: 3),
+            ),
+          );
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context);
+          } else {
+            Navigator.pushReplacementNamed(context, AppRoutes.signIn);
+          }
+        }
       }
     });
   }

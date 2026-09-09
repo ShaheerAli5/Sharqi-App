@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/services/attendance_repository.dart';
 import '../../../../core/services/auth_repository.dart';
 import '../../../../core/services/storage_service.dart';
 
@@ -29,6 +30,7 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
   final TextEditingController _subjectController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
   bool _isDisclaimerAccepted = false;
+  bool _isSubmitting = false;
 
   List<String> _companies = [];
 
@@ -58,20 +60,31 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
       _employeeEmailController.text = email;
     }
 
-    _fetchCompanies();
+    _fetchApiData();
   }
 
-  Future<void> _fetchCompanies() async {
+  Future<void> _fetchApiData() async {
     try {
       final compList = await AuthRepository().getCompanyList();
-      if (compList.isNotEmpty && mounted) {
+      final dashData = await AttendanceRepository().getDashboardData();
+
+      if (mounted) {
         setState(() {
-          _companies = compList.map((c) => c.name).toList();
-          final savedCompany = StorageService.getValue(StorageService.keyCompanyName);
-          if (savedCompany.isNotEmpty && _companies.contains(savedCompany)) {
-            _selectedCompany = savedCompany;
-          } else if (_companies.isNotEmpty) {
-            _selectedCompany = _companies.first;
+          if (compList.isNotEmpty) {
+            _companies = compList.map((c) => c.name).toList();
+            final savedCompany =
+                StorageService.getValue(StorageService.keyCompanyName);
+            if (savedCompany.isNotEmpty && _companies.contains(savedCompany)) {
+              _selectedCompany = savedCompany;
+            } else if (_companies.isNotEmpty) {
+              _selectedCompany = _companies.first;
+            }
+          }
+          if (dashData.qidNumber.isNotEmpty) {
+            _qidController.text = dashData.qidNumber;
+          }
+          if (dashData.qidExpiry.isNotEmpty) {
+            _qidExpiryController.text = dashData.qidExpiry;
           }
         });
       }
@@ -140,7 +153,9 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                       ? const Center(
                           child: Padding(
                             padding: EdgeInsets.all(20.0),
-                            child: CircularProgressIndicator(color: AppColors.primary),
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
                           ),
                         )
                       : ListView.separated(
@@ -189,7 +204,7 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
     );
   }
 
-  void _onConfirmDetails() {
+  Future<void> _onConfirmDetails() async {
     if (!_isDisclaimerAccepted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -198,13 +213,65 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Bright Idea submitted successfully!'),
-        backgroundColor: AppColors.primary,
-      ),
-    );
-    Navigator.pop(context);
+
+    if (_subjectController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter Subject / Idea Title')),
+      );
+      return;
+    }
+
+    if (_messageController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please describe your idea')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final payload = {
+        'company': _selectedCompany,
+        'employee_number': _employeeNoController.text.trim(),
+        'employee_name': _employeeNameController.text.trim(),
+        'employee_email': _employeeEmailController.text.trim(),
+        'employee_phone': _employeePhoneController.text.trim(),
+        'qid_no': _qidController.text.trim(),
+        'qid_expiry': _qidExpiryController.text.trim(),
+        'subject': _subjectController.text.trim(),
+        'message': _messageController.text.trim(),
+        'disclaimer_confirmed': _isDisclaimerAccepted,
+      };
+
+      final response = await AttendanceRepository().submitBrightIdea(payload);
+
+      if (mounted) {
+        if (response['error'] != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed: ${response['error']}')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bright Idea submitted successfully!'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+          Navigator.pop(context);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Submission error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override
@@ -239,6 +306,7 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // EMPLOYEE DETAILS Section
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -319,7 +387,10 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 24),
+
+                      // BRIGHT IDEA DETAILS Section
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -413,12 +484,15 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 28),
+
+                      // Confirm Details Button
                       SizedBox(
                         width: double.infinity,
                         height: 48,
                         child: ElevatedButton(
-                          onPressed: _onConfirmDetails,
+                          onPressed: _isSubmitting ? null : _onConfirmDetails,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFC6134B),
                             elevation: 0,
@@ -432,26 +506,35 @@ class _BrightIdeaFormScreenState extends State<BrightIdeaFormScreen> {
                               ),
                             ),
                           ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Confirm Details',
-                                style: TextStyle(
-                                  fontFamily: 'Outfit',
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
+                          child: _isSubmitting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Confirm Details',
+                                      style: TextStyle(
+                                        fontFamily: 'Outfit',
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    Icon(
+                                      Icons.arrow_forward_rounded,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              SizedBox(width: 8),
-                              Icon(
-                                Icons.arrow_forward_rounded,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                     ],

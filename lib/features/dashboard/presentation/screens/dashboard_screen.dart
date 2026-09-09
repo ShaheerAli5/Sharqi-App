@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -30,21 +31,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _isLoading = true);
     try {
       final dashData = await _attendanceRepository.getDashboardData();
-      setState(() {
-        _dashboardData = {
-          'company': dashData.company,
-          'join_date': dashData.joinDate,
-          'qid_number': dashData.qidNumber,
-          'qid_expiry': dashData.qidExpiry,
-          'passport_number': dashData.passportNumber,
-          'passport_expiry': dashData.passportExpiry,
-          'gender': dashData.gender,
-          'nationality': dashData.nationality,
-          'work_location': dashData.workLocation,
-          'location': dashData.location,
-          'manager': dashData.manager,
-        };
-      });
+      if (mounted) {
+        setState(() {
+          _dashboardData = {
+            'company': dashData.company,
+            'join_date': dashData.joinDate,
+            'qid_number': dashData.qidNumber,
+            'qid_expiry': dashData.qidExpiry,
+            'passport_number': dashData.passportNumber,
+            'passport_expiry': dashData.passportExpiry,
+            'gender': dashData.gender,
+            'nationality': dashData.nationality,
+            'work_location': dashData.workLocation,
+            'location': dashData.location,
+            'manager': dashData.manager,
+            'full_name': dashData.fullName,
+            'employee_number': dashData.empNo,
+            'phone': dashData.phone,
+            'whatsapp': dashData.whatsapp,
+            'profile_image': dashData.profileImage,
+          };
+        });
+      }
     } catch (_) {
     } finally {
       if (mounted) {
@@ -79,7 +87,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ? _dashboardData['whatsapp'].toString()
         : StorageService.getValue(StorageService.keyWhatsAppData);
 
-    final company = _dashboardData['company']?.toString() ?? StorageService.getValue(StorageService.keyCompanyName);
+    final profileImg = _dashboardData['profile_image']?.toString().isNotEmpty == true
+        ? _dashboardData['profile_image'].toString()
+        : StorageService.getValue(StorageService.keyProfileImage);
+
+    final company = _dashboardData['company']?.toString().isNotEmpty == true
+        ? _dashboardData['company'].toString()
+        : StorageService.getValue(StorageService.keyCompanyName);
+
     final joinDate = _dashboardData['join_date']?.toString() ?? '';
     final qid = _dashboardData['qid_number']?.toString() ?? '';
     final qidExpiry = _dashboardData['qid_expiry']?.toString() ?? '';
@@ -105,7 +120,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Container(
               width: double.infinity,
               decoration: const BoxDecoration(
-                color: Color(0xFFFBF6F3), // Exact Hex: #FBF6F3
+                color: Color(0xFFFBF6F3),
                 borderRadius: BorderRadius.vertical(
                   top: Radius.circular(24),
                 ),
@@ -113,118 +128,119 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                   : SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Profile Info Row
-                    _ProfileInfoCard(
-                      name: fullName,
-                      empId: empNo.isNotEmpty ? 'EMP#$empNo' : '',
-                      phone: phone,
-                      whatsapp: whatsapp,
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Profile Info Row
+                          _ProfileInfoCard(
+                            name: fullName,
+                            empId: empNo.isNotEmpty ? 'EMP#$empNo' : '',
+                            phone: phone,
+                            whatsapp: whatsapp,
+                            profileImg: profileImg,
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Personal Details Section
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const _CategoryHeader(title: AppStrings.personalDetailsHeader),
+                              const SizedBox(height: 8),
+                              _DetailRow(
+                                leftItem: _DetailItem(
+                                  icon: Icons.person_outline_rounded,
+                                  label: AppStrings.genderLabel,
+                                  value: gender.isNotEmpty ? gender : '—',
+                                ),
+                                rightItem: _DetailItem(
+                                  icon: Icons.public_rounded,
+                                  label: AppStrings.nationalityLabel,
+                                  value: nationality.isNotEmpty ? nationality : '—',
+                                ),
+                              ),
+                              const _DividerLine(),
+                              _DetailRow(
+                                leftItem: _DetailItem(
+                                  icon: Icons.badge_outlined,
+                                  label: AppStrings.qidLabel,
+                                  value: qid.isNotEmpty ? qid : '—',
+                                ),
+                                rightItem: _DetailItem(
+                                  icon: Icons.access_time_rounded,
+                                  label: AppStrings.qidExpiryLabel,
+                                  value: qidExpiry.isNotEmpty ? qidExpiry : '—',
+                                ),
+                              ),
+                              const _DividerLine(),
+                              _DetailRow(
+                                leftItem: _DetailItem(
+                                  icon: Icons.contact_page_outlined,
+                                  label: AppStrings.passportNoLabel,
+                                  value: passportNo.isNotEmpty ? passportNo : '—',
+                                ),
+                                rightItem: _DetailItem(
+                                  icon: Icons.calendar_today_rounded,
+                                  label: AppStrings.passportExpLabel,
+                                  value: passportExp.isNotEmpty ? passportExp : '—',
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Work Details Section
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const _CategoryHeader(title: AppStrings.workDetailsHeader),
+                              const SizedBox(height: 8),
+                              _DetailRow(
+                                leftItem: _DetailItem(
+                                  icon: Icons.business_outlined,
+                                  label: AppStrings.companyLabel,
+                                  value: company.isNotEmpty ? company : '—',
+                                ),
+                                rightItem: _DetailItem(
+                                  icon: Icons.calendar_month_rounded,
+                                  label: AppStrings.joinDateLabel,
+                                  value: joinDate.isNotEmpty ? joinDate : '—',
+                                ),
+                              ),
+                              const _DividerLine(),
+                              _DetailRow(
+                                leftItem: _DetailItem(
+                                  icon: Icons.explore_outlined,
+                                  label: AppStrings.locationLabel,
+                                  value: location.isNotEmpty ? location : '—',
+                                ),
+                                rightItem: _DetailItem(
+                                  icon: Icons.location_on_outlined,
+                                  label: AppStrings.workLocationLabel,
+                                  value: workLocation.isNotEmpty ? workLocation : '—',
+                                ),
+                              ),
+                              const _DividerLine(),
+                              _DetailRow(
+                                leftItem: _DetailItem(
+                                  icon: Icons.people_outline_rounded,
+                                  label: AppStrings.managerLabel,
+                                  value: manager.isNotEmpty ? manager : '—',
+                                ),
+                                rightItem: const SizedBox(),
+                              ),
+                              const _DividerLine(),
+                            ],
+                          ),
+
+                          const SizedBox(height: 24),
+                        ],
+                      ),
                     ),
-
-                    const SizedBox(height: 24),
-
-                    // Personal Details Section
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _CategoryHeader(title: AppStrings.personalDetailsHeader),
-                        const SizedBox(height: 8),
-                        _DetailRow(
-                          leftItem: _DetailItem(
-                            icon: Icons.person_outline_rounded,
-                            label: AppStrings.genderLabel,
-                            value: gender,
-                          ),
-                          rightItem: _DetailItem(
-                            icon: Icons.public_rounded,
-                            label: AppStrings.nationalityLabel,
-                            value: nationality,
-                          ),
-                        ),
-                        const _DividerLine(),
-                        _DetailRow(
-                          leftItem: _DetailItem(
-                            icon: Icons.badge_outlined,
-                            label: AppStrings.qidLabel,
-                            value: qid,
-                          ),
-                          rightItem: _DetailItem(
-                            icon: Icons.access_time_rounded,
-                            label: AppStrings.qidExpiryLabel,
-                            value: qidExpiry,
-                          ),
-                        ),
-                        const _DividerLine(),
-                        _DetailRow(
-                          leftItem: _DetailItem(
-                            icon: Icons.contact_page_outlined,
-                            label: AppStrings.passportNoLabel,
-                            value: passportNo,
-                          ),
-                          rightItem: _DetailItem(
-                            icon: Icons.calendar_today_rounded,
-                            label: AppStrings.passportExpLabel,
-                            value: passportExp,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Work Details Section
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _CategoryHeader(title: AppStrings.workDetailsHeader),
-                        const SizedBox(height: 8),
-                        _DetailRow(
-                          leftItem: _DetailItem(
-                            icon: Icons.business_outlined,
-                            label: AppStrings.companyLabel,
-                            value: company,
-                          ),
-                          rightItem: _DetailItem(
-                            icon: Icons.calendar_month_rounded,
-                            label: AppStrings.joinDateLabel,
-                            value: joinDate,
-                          ),
-                        ),
-                        const _DividerLine(),
-                        _DetailRow(
-                          leftItem: _DetailItem(
-                            icon: Icons.explore_outlined,
-                            label: AppStrings.locationLabel,
-                            value: location,
-                          ),
-                          rightItem: _DetailItem(
-                            icon: Icons.location_on_outlined,
-                            label: AppStrings.workLocationLabel,
-                            value: workLocation,
-                          ),
-                        ),
-                        const _DividerLine(),
-                        _DetailRow(
-                          leftItem: _DetailItem(
-                            icon: Icons.people_outline_rounded,
-                            label: AppStrings.managerLabel,
-                            value: manager,
-                          ),
-                          rightItem: const SizedBox(),
-                        ),
-                        const _DividerLine(),
-                      ],
-                    ),
-
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
             ),
           ),
         ],
@@ -309,46 +325,79 @@ class _ProfileInfoCard extends StatelessWidget {
   final String empId;
   final String phone;
   final String whatsapp;
+  final String profileImg;
 
   const _ProfileInfoCard({
     required this.name,
     required this.empId,
     required this.phone,
     required this.whatsapp,
+    required this.profileImg,
   });
+
+  Widget _buildProfileImage(BuildContext context) {
+    if (profileImg.isEmpty) {
+      return const Icon(
+        Icons.person_outline_rounded,
+        size: 40,
+        color: AppColors.primary,
+      );
+    }
+
+    try {
+      if (profileImg.startsWith('http://') || profileImg.startsWith('https://')) {
+        return Image.network(
+          profileImg,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => const Icon(
+            Icons.person_outline_rounded,
+            size: 40,
+            color: AppColors.primary,
+          ),
+        );
+      }
+
+      String cleanBase64 = profileImg;
+      if (cleanBase64.contains(',')) {
+        cleanBase64 = cleanBase64.split(',').last;
+      }
+      cleanBase64 = cleanBase64.replaceAll(RegExp(r'\s+'), '');
+
+      final bytes = base64Decode(cleanBase64);
+      return Image.memory(
+        bytes,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => const Icon(
+          Icons.person_outline_rounded,
+          size: 40,
+          color: AppColors.primary,
+        ),
+      );
+    } catch (_) {
+      return const Icon(
+        Icons.person_outline_rounded,
+        size: 40,
+        color: AppColors.primary,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final profileImg = StorageService.getValue(StorageService.keyProfileImage);
-
     return SizedBox(
-      height: 86, // Exact Height: Fixed 86px
+      height: 86,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            width: 86, // Exact Figma Width: 86px
-            height: 86, // Exact Figma Height: 86px
+            width: 86,
+            height: 86,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.grey.shade300,
             ),
-            child: profileImg.isNotEmpty
-                ? ClipOval(
-              child: Image.network(
-                profileImg,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => const Icon(
-                  Icons.person_outline_rounded,
-                  size: 40,
-                  color: AppColors.primary,
-                ),
-              ),
-            )
-                : const Icon(
-              Icons.person_outline_rounded,
-              size: 40,
-              color: AppColors.primary,
+            child: ClipOval(
+              child: _buildProfileImage(context),
             ),
           ),
           const SizedBox(width: 16),
@@ -608,4 +657,3 @@ class _DividerLine extends StatelessWidget {
     );
   }
 }
-

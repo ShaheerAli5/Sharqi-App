@@ -11,6 +11,11 @@ class DashboardData {
   final String workLocation;
   final String location;
   final String manager;
+  final String fullName;
+  final String empNo;
+  final String phone;
+  final String whatsapp;
+  final String profileImage;
   final String? error;
 
   DashboardData({
@@ -26,6 +31,11 @@ class DashboardData {
     required this.workLocation,
     required this.location,
     required this.manager,
+    this.fullName = '',
+    this.empNo = '',
+    this.phone = '',
+    this.whatsapp = '',
+    this.profileImage = '',
     this.error,
   });
 
@@ -48,6 +58,11 @@ class DashboardData {
       workLocation: parseSafe(result['work_location']),
       location: parseSafe(result['location']),
       manager: parseSafe(result['manager']),
+      fullName: parseSafe(result['full_name'] ?? result['name'] ?? result['employee_name']),
+      empNo: parseSafe(result['employee_number'] ?? result['emp_no'] ?? result['employee_id']),
+      phone: parseSafe(result['phone'] ?? result['mobile']),
+      whatsapp: parseSafe(result['whatsapp'] ?? result['whatsapp_phone']),
+      profileImage: parseSafe(result['profile_image'] ?? result['profile_image_base64'] ?? result['image']),
       error: result['error']?.toString(),
     );
   }
@@ -94,6 +109,16 @@ class DashboardData {
         return location;
       case 'manager':
         return manager;
+      case 'full_name':
+        return fullName;
+      case 'employee_number':
+        return empNo;
+      case 'phone':
+        return phone;
+      case 'whatsapp':
+        return whatsapp;
+      case 'profile_image':
+        return profileImage;
       case 'error':
         return error;
       case 'result':

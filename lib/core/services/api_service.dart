@@ -29,8 +29,16 @@ class ApiService {
       final response = await _dio.post(
         endpoint,
         data: {'params': params},
+        options: Options(
+          validateStatus: (status) => status != null && status < 500,
+        ),
       );
       return response;
+    } on DioException catch (e) {
+      if (e.response != null) {
+        return e.response!;
+      }
+      rethrow;
     } catch (e) {
       rethrow;
     }
@@ -262,7 +270,7 @@ class ApiService {
   /// 15. Get Notification Logs -> POST notification/logs
   Future<Response> getNotificationLogs({
     required String empNo,
-    required dynamic companyId,
+     required dynamic companyId,
     required String apiToken,
   }) {
     return _postRpc('notification/logs', {
@@ -271,6 +279,138 @@ class ApiService {
       'company_id': companyId,
       'api_token': apiToken,
     });
+  }
+
+  /// 16. Get Self Service Portal List -> POST self_service/portal
+  Future<Response> getSelfServicePortal({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+  }) {
+    return _postRpc('self_service/portal', {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+    });
+  }
+
+  /// 17. Get Complaint Categories -> POST complaint/categories
+  Future<Response> getComplaintCategories({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+  }) {
+    return _postRpc('complaint/categories', {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+    });
+  }
+
+  /// 18. Submit Complaint Request -> POST complaint/create
+  Future<Response> submitComplaint({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+    required Map<String, dynamic> data,
+  }) {
+    final Map<String, dynamic> payload = {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+      ...data,
+    };
+    return _postRpc('complaint/create', payload);
+  }
+
+  /// 19. Get Employee Request Categories -> POST employee_request/categories
+  Future<Response> getEmployeeRequestCategories({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+  }) {
+    return _postRpc('employee_request/categories', {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+    });
+  }
+
+  /// 20. Submit Employee Request -> POST employee_request/create
+  Future<Response> submitEmployeeRequest({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+    required Map<String, dynamic> data,
+  }) {
+    final Map<String, dynamic> payload = {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+      ...data,
+    };
+    return _postRpc('employee_request/create', payload);
+  }
+
+  /// 21. Get Leave Types -> POST leave/types
+  Future<Response> getLeaveTypes({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+  }) {
+    return _postRpc('leave/types', {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+    });
+  }
+
+  /// 22. Submit Leave Request -> POST leave/create
+  Future<Response> submitLeaveRequest({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+    required Map<String, dynamic> data,
+  }) {
+    final Map<String, dynamic> payload = {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+      ...data,
+    };
+    return _postRpc('leave/create', payload);
+  }
+
+  /// 23. Submit Bright Idea -> POST bright_idea/create
+  Future<Response> submitBrightIdea({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+    required Map<String, dynamic> data,
+  }) {
+    final Map<String, dynamic> payload = {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+      ...data,
+    };
+    return _postRpc('bright_idea/create', payload);
+  }
+
+  /// 24. Submit Salary Slip Request -> POST salary_slip/create
+  Future<Response> submitSalarySlipRequest({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+    required Map<String, dynamic> data,
+  }) {
+    final Map<String, dynamic> payload = {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+      ...data,
+    };
+    return _postRpc('salary_slip/create', payload);
   }
 
   // ---------------------------------------------------------------------------

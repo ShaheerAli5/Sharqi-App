@@ -36,9 +36,17 @@ class _LeaveRequestFormScreenState extends State<LeaveRequestFormScreen> {
   String? _lastWorkingDate;
   String _selectedDutyManager = 'Doha Main Office';
   bool _isDisclaimerAccepted = false;
+  bool _isSubmitting = false;
 
   List<String> _companies = [];
   List<String> _dutyManagers = [];
+  List<String> _leaveTypes = [
+    'Annual Leave',
+    'Sick Leave',
+    'Unpaid Leave',
+    'Emergency Leave',
+    'Maternity / Paternity Leave',
+  ];
 
   @override
   void initState() {
@@ -73,11 +81,15 @@ class _LeaveRequestFormScreenState extends State<LeaveRequestFormScreen> {
     try {
       final compList = await AuthRepository().getCompanyList();
       final locList = await AttendanceRepository().getWorkLocationList();
+      final leaveTypeList = await AttendanceRepository().getLeaveTypes();
+      final dashData = await AttendanceRepository().getDashboardData();
+
       if (mounted) {
         setState(() {
           if (compList.isNotEmpty) {
             _companies = compList.map((c) => c.name).toList();
-            final savedCompany = StorageService.getValue(StorageService.keyCompanyName);
+            final savedCompany =
+                StorageService.getValue(StorageService.keyCompanyName);
             if (savedCompany.isNotEmpty && _companies.contains(savedCompany)) {
               _selectedCompany = savedCompany;
             } else if (_companies.isNotEmpty) {
@@ -90,18 +102,19 @@ class _LeaveRequestFormScreenState extends State<LeaveRequestFormScreen> {
               _selectedDutyManager = _dutyManagers.first;
             }
           }
+          if (leaveTypeList.isNotEmpty) {
+            _leaveTypes = leaveTypeList;
+          }
+          if (dashData.qidNumber.isNotEmpty) {
+            _qidController.text = dashData.qidNumber;
+          }
+          if (dashData.qidExpiry.isNotEmpty) {
+            _qidExpiryController.text = dashData.qidExpiry;
+          }
         });
       }
     } catch (_) {}
   }
-
-  final List<String> _leaveTypes = [
-    'Annual Leave',
-    'Sick Leave',
-    'Unpaid Leave',
-    'Emergency Leave',
-    'Maternity / Paternity Leave',
-  ];
 
   @override
   void dispose() {
@@ -163,7 +176,9 @@ class _LeaveRequestFormScreenState extends State<LeaveRequestFormScreen> {
                       ? const Center(
                           child: Padding(
                             padding: EdgeInsets.all(20.0),
-                            child: CircularProgressIndicator(color: AppColors.primary),
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
                           ),
                         )
                       : ListView.separated(
@@ -238,7 +253,7 @@ class _LeaveRequestFormScreenState extends State<LeaveRequestFormScreen> {
     }
   }
 
-  void _onConfirmDetails() {
+  Future<void> _onConfirmDetails() async {
     if (!_isDisclaimerAccepted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -247,13 +262,70 @@ class _LeaveRequestFormScreenState extends State<LeaveRequestFormScreen> {
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Leave request submitted successfully!'),
-        backgroundColor: AppColors.primary,
-      ),
-    );
-    Navigator.pop(context);
+
+    if (_selectedLeaveType == null || _selectedLeaveType!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select Leave Type')),
+      );
+      return;
+    }
+
+    if (_leaveFromDate == null || _leaveToDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select Leave From and To dates')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final payload = {
+        'company': _selectedCompany,
+        'employee_number': _employeeNoController.text.trim(),
+        'employee_name': _employeeNameController.text.trim(),
+        'employee_email': _employeeEmailController.text.trim(),
+        'employee_phone': _employeePhoneController.text.trim(),
+        'qid_no': _qidController.text.trim(),
+        'qid_expiry': _qidExpiryController.text.trim(),
+        'leave_type': _selectedLeaveType,
+        'last_leave_date': _lastLeaveDate ?? '',
+        'last_return_date': _lastReturnDate ?? '',
+        'leave_from_date': _leaveFromDate,
+        'leave_to_date': _leaveToDate,
+        'last_working_date': _lastWorkingDate ?? '',
+        'duty_manager': _selectedDutyManager,
+        'disclaimer_confirmed': _isDisclaimerAccepted,
+      };
+
+      final response = await AttendanceRepository().submitLeaveRequest(payload);
+
+      if (mounted) {
+        if (response['error'] != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed: ${response['error']}')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Leave request submitted successfully!'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+          Navigator.pop(context);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Submission error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override
@@ -288,6 +360,7 @@ class _LeaveRequestFormScreenState extends State<LeaveRequestFormScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // EMPLOYEE DETAILS Section
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -368,7 +441,10 @@ class _LeaveRequestFormScreenState extends State<LeaveRequestFormScreen> {
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 24),
+
+                      // LEAVE DETAILS Section
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -523,12 +599,15 @@ class _LeaveRequestFormScreenState extends State<LeaveRequestFormScreen> {
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 28),
+
+                      // Confirm Details Button
                       SizedBox(
                         width: double.infinity,
                         height: 48,
                         child: ElevatedButton(
-                          onPressed: _onConfirmDetails,
+                          onPressed: _isSubmitting ? null : _onConfirmDetails,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFC6134B),
                             elevation: 0,
@@ -542,26 +621,35 @@ class _LeaveRequestFormScreenState extends State<LeaveRequestFormScreen> {
                               ),
                             ),
                           ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Confirm Details',
-                                style: TextStyle(
-                                  fontFamily: 'Outfit',
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
+                          child: _isSubmitting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Confirm Details',
+                                      style: TextStyle(
+                                        fontFamily: 'Outfit',
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    Icon(
+                                      Icons.arrow_forward_rounded,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              SizedBox(width: 8),
-                              Icon(
-                                Icons.arrow_forward_rounded,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                     ],

@@ -10,6 +10,7 @@ import '../features/self_service/presentation/screens/track_case_screen.dart';
 import '../features/self_service/presentation/screens/employee_request_form_screen.dart';
 import '../features/self_service/presentation/screens/leave_request_form_screen.dart';
 import '../features/self_service/presentation/screens/bright_idea_form_screen.dart';
+import '../features/self_service/presentation/screens/salary_slip_screen.dart';
 import '../features/attendance/presentation/screens/record_time_in_screen.dart';
 import '../features/attendance/presentation/screens/record_time_out_screen.dart';
 import '../features/attendance/presentation/screens/attendance_list_screen.dart';
@@ -30,6 +31,7 @@ class AppRoutes {
   static const String employeeRequestForm = '/employee-request-form';
   static const String leaveRequestForm = '/leave-request-form';
   static const String brightIdeaForm = '/bright-idea-form';
+  static const String salarySlip = '/salary-slip';
   static const String recordTimeIn = '/record-time-in';
   static const String recordTimeOut = '/record-time-out';
   static const String attendanceList = '/attendance-list';
@@ -48,6 +50,7 @@ class AppRoutes {
     employeeRequestForm: (context) => const EmployeeRequestFormScreen(),
     leaveRequestForm: (context) => const LeaveRequestFormScreen(),
     brightIdeaForm: (context) => const BrightIdeaFormScreen(),
+    salarySlip: (context) => const SalarySlipScreen(),
     recordTimeIn: (context) => const RecordTimeInScreen(),
     recordTimeOut: (context) => const RecordTimeOutScreen(),
     attendanceList: (context) => const AttendanceListScreen(),
