@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/services/attendance_repository.dart';
+import '../../../../core/services/storage_service.dart';
 
 class TrackCaseArguments {
   final String labelText;
@@ -32,6 +34,17 @@ class TrackCaseScreen extends StatefulWidget {
 
 class _TrackCaseScreenState extends State<TrackCaseScreen> {
   final TextEditingController _codeController = TextEditingController();
+  final AttendanceRepository _attendanceRepository = AttendanceRepository();
+
+  bool _isLoading = true;
+  String? _searchError;
+  List<Map<String, dynamic>> _cases = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCases();
+  }
 
   @override
   void dispose() {
@@ -39,22 +52,193 @@ class _TrackCaseScreenState extends State<TrackCaseScreen> {
     super.dispose();
   }
 
-  void _onSearch(String label, String buttonLabel) {
-    final code = _codeController.text.trim();
-    if (code.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Please enter ${label.toLowerCase()}'),
-        ),
-      );
-      return;
+  Future<void> _fetchCases({String searchCode = ''}) async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _isLoading = true;
+      _searchError = null;
+    });
+
+    try {
+      final caseList =
+          await _attendanceRepository.getEmployeeCases(code: searchCode);
+      if (!mounted) return;
+
+      setState(() {
+        _cases = caseList;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _searchError = 'Failed to fetch case status from backend: $e';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildCaseCard(Map<String, dynamic> data) {
+    final code = data['code']?.toString() ??
+        data['reference']?.toString() ??
+        data['name']?.toString() ??
+        data['id']?.toString() ??
+        'Case Record';
+    final category = data['category']?.toString() ??
+        data['type']?.toString() ??
+        data['title']?.toString() ??
+        'Self Service Request';
+    final status = data['status']?.toString() ??
+        data['state']?.toString() ??
+        data['stage']?.toString() ??
+        'Submitted';
+    final date = data['date']?.toString() ??
+        data['created_at']?.toString() ??
+        data['submission_date']?.toString() ??
+        '';
+    final empName = data['employee_name']?.toString() ??
+        data['emp_name']?.toString() ??
+        StorageService.getValue(StorageService.keyFullName);
+    final empNo = data['emp_no']?.toString() ??
+        data['employee_number']?.toString() ??
+        StorageService.getValue(StorageService.keyEmpNo);
+    final description = data['description']?.toString() ??
+        data['note']?.toString() ??
+        data['reason']?.toString();
+    final remarks = data['manager_comment']?.toString() ??
+        data['remarks']?.toString() ??
+        data['comment']?.toString();
+
+    // Status badge color logic
+    Color badgeBg = const Color(0xFFFDE8EE);
+    Color badgeText = AppColors.primary;
+
+    final statusLower = status.toLowerCase();
+    if (statusLower.contains('approve') ||
+        statusLower.contains('done') ||
+        statusLower.contains('resolve') ||
+        statusLower.contains('close')) {
+      badgeBg = const Color(0xFFE8F5E9);
+      badgeText = const Color(0xFF2E7D32);
+    } else if (statusLower.contains('progress') ||
+        statusLower.contains('review') ||
+        statusLower.contains('pending')) {
+      badgeBg = const Color(0xFFFFF8E1);
+      badgeText = const Color(0xFFF57F17);
+    } else if (statusLower.contains('reject') ||
+        statusLower.contains('cancel')) {
+      badgeBg = const Color(0xFFFFEBEE);
+      badgeText = const Color(0xFFC62828);
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Searching for $code...'),
-        backgroundColor: AppColors.primary,
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14.0),
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(18),
+          topRight: Radius.circular(18),
+          bottomRight: Radius.circular(18),
+          bottomLeft: Radius.circular(6),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                code,
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A1310),
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: badgeText,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: AppColors.divider),
+          const SizedBox(height: 12),
+          _buildInfoRow('Category', category),
+          if (empName.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildInfoRow(
+                'Employee', empNo.isNotEmpty ? '$empName ($empNo)' : empName),
+          ],
+          if (date.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildInfoRow('Date', date),
+          ],
+          if (description != null && description.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildInfoRow('Details', description),
+          ],
+          if (remarks != null && remarks.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildInfoRow('Remarks', remarks),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 90,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF6B5D58),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1A1310),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -80,181 +264,314 @@ class _TrackCaseScreenState extends State<TrackCaseScreen> {
           // Header Bar with Burgundy Gradient
           _buildHeader(context),
 
-          // Main Body Container (Fill 402px, Radius TL24 TR24, Color #FBF6F3)
+          // Main Body Container
           Expanded(
             child: Container(
               width: double.infinity,
               decoration: const BoxDecoration(
-                color: Color(0xFFFBF6F3), // Exact Hex: #FBF6F3
+                color: Color(0xFFFBF6F3),
                 borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(24), // Exact Radius: 24px
+                  top: Radius.circular(24),
                 ),
               ),
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20.0,
-                  vertical: 24.0,
-                ),
-                child: Column(
-                  children: [
-                    // div.ssp-card: Floating White Card (Fixed 354px x Hug 163px, Radii TL18 TR18 BR18 BL6, Padding 16px, Gap 16px, Color #FFFFFF)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16.0), // Exact Padding: 16px
-                      decoration: BoxDecoration(
-                        color: Colors.white, // Exact Color: #FFFFFF
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(18), // Exact TL: 18px
-                          topRight: Radius.circular(18), // Exact TR: 18px
-                          bottomRight: Radius.circular(18), // Exact BR: 18px
-                          bottomLeft: Radius.circular(6), // Exact BL: 6px
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
+              child: RefreshIndicator(
+                onRefresh: () => _fetchCases(searchCode: _codeController.text.trim()),
+                color: AppColors.primary,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 24.0,
+                  ),
+                  child: Column(
+                    children: [
+                      // Floating Search Card
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16.0),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(18),
+                            topRight: Radius.circular(18),
+                            bottomRight: Radius.circular(18),
+                            bottomLeft: Radius.circular(6),
                           ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // div.field: Fill 322px x Hug 67px, Gap 8px
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Text: "LEAVE CODE *" or "INCIDENT CODE *"
-                              Text.rich(
-                                TextSpan(
-                                  children: [
-                                    TextSpan(
-                                      text: effectiveLabelText,
-                                      style: const TextStyle(
-                                        fontFamily: 'Outfit',
-                                        fontSize: 12, // Exact Size: 12px
-                                        fontWeight: FontWeight.w500, // Exact Weight: 500 Medium
-                                        color: Color(0xFF5E5855), // Exact Hex: #5E5855
-                                        letterSpacing: 0.0, // Exact Letter Spacing: 0%
-                                        height: 1.0, // Exact Line Height: 100%
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: effectiveLabelText,
+                                        style: const TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: Color(0xFF5E5855),
+                                          letterSpacing: 0.0,
+                                          height: 1.0,
+                                        ),
                                       ),
-                                    ),
-                                    const TextSpan(
-                                      text: ' *',
-                                      style: TextStyle(
-                                        fontFamily: 'Outfit',
-                                        fontSize: 12, // Exact Size: 12px
-                                        fontWeight: FontWeight.w500, // Exact Weight: 500 Medium
-                                        color: Color(0xFFC6134B), // Exact Hex: #C6134B
-                                        letterSpacing: 0.0,
-                                        height: 1.0,
+                                      const TextSpan(
+                                        text: ' *',
+                                        style: TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: Color(0xFFC6134B),
+                                          letterSpacing: 0.0,
+                                          height: 1.0,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
 
-                              const SizedBox(height: 8), // Exact Gap: 8px
+                                const SizedBox(height: 8),
 
-                              // Input Field Box
-                              SizedBox(
-                                height: 44, // 67px total - 15px label - 8px gap = 44px box
-                                child: TextFormField(
-                                  controller: _codeController,
+                                SizedBox(
+                                  height: 44,
+                                  child: TextFormField(
+                                    controller: _codeController,
+                                    style: const TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 14,
+                                      color: Color(0xFF1A1310),
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: effectiveHintText,
+                                      hintStyle: const TextStyle(
+                                        fontFamily: 'Outfit',
+                                        color: Color(0xFFA0A0A0),
+                                        fontSize: 14,
+                                      ),
+                                      filled: true,
+                                      fillColor: const Color(0xFFFAF7F5),
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 12,
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFFE8DFE1),
+                                          width: 1.0,
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: const BorderSide(
+                                          color: AppColors.primary,
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: SizedBox(
+                                    height: 48,
+                                    child: ElevatedButton(
+                                      onPressed: _isLoading
+                                          ? null
+                                          : () => _fetchCases(
+                                                searchCode:
+                                                    _codeController.text.trim(),
+                                              ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            const Color(0xFFC6134B),
+                                        disabledBackgroundColor:
+                                            Colors.grey.shade400,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.fromLTRB(
+                                            6, 1, 6, 1),
+                                        shape: const RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.only(
+                                            topLeft: Radius.circular(26),
+                                            topRight: Radius.circular(26),
+                                            bottomRight: Radius.circular(26),
+                                            bottomLeft: Radius.circular(6),
+                                          ),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            effectiveButtonText,
+                                            textAlign: TextAlign.center,
+                                            maxLines: 1,
+                                            softWrap: false,
+                                            style: const TextStyle(
+                                              fontFamily: 'Outfit',
+                                              color: Colors.white,
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w400,
+                                              letterSpacing: 0.16,
+                                              height: 1.0,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          const Icon(
+                                            Icons.search_rounded,
+                                            color: Colors.white,
+                                            size: 16,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (_codeController.text.isNotEmpty) ...[
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    onPressed: () {
+                                      _codeController.clear();
+                                      _fetchCases(searchCode: '');
+                                    },
+                                    icon: const Icon(Icons.clear_rounded,
+                                        color: AppColors.primary),
+                                    tooltip: 'Show All Cases',
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Search Results Display Area
+                      if (_isLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 32.0),
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(
+                                    color: AppColors.primary),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Fetching case records from backend...',
+                                  style: TextStyle(
+                                    fontFamily: 'Outfit',
+                                    fontSize: 13,
+                                    color: Color(0xFF666666),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else if (_searchError != null)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16.0),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFEBEE),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFEF9A9A)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline_rounded,
+                                  color: Color(0xFFC62828)),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _searchError!,
                                   style: const TextStyle(
                                     fontFamily: 'Outfit',
-                                    fontSize: 14,
-                                    color: Color(0xFF1A1310),
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: effectiveHintText,
-                                    hintStyle: const TextStyle(
-                                      fontFamily: 'Outfit',
-                                      color: Color(0xFFA0A0A0),
-                                      fontSize: 14,
-                                    ),
-                                    filled: true,
-                                    fillColor: const Color(0xFFFAF7F5),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFFE8DFE1),
-                                        width: 1.0,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: AppColors.primary,
-                                        width: 1.5,
-                                      ),
-                                    ),
+                                    fontSize: 13,
+                                    color: Color(0xFFC62828),
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ),
                             ],
                           ),
-
-                          const SizedBox(height: 16), // Exact Gap: 16px inside ssp-card
-
-                          // Search Button (Fill 322px x Fixed 48px, Radii TL26 TR26 BR26 BL6, Padding 1px 6px 1px 6px, Gap 8px, Color #C6134B)
-                          SizedBox(
-                            width: double.infinity,
-                            height: 48, // Exact Height: Fixed 48px
-                            child: ElevatedButton(
-                              onPressed: () => _onSearch(effectiveLabelText, effectiveButtonText),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFC6134B), // Exact Color: #C6134B
-                                elevation: 0,
-                                padding: const EdgeInsets.fromLTRB(6, 1, 6, 1), // Exact Padding: 1px 6px 1px 6px
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: Radius.circular(26), // Exact TL: 26px
-                                    topRight: Radius.circular(26), // Exact TR: 26px
-                                    bottomRight: Radius.circular(26), // Exact BR: 26px
-                                    bottomLeft: Radius.circular(6), // Exact BL: 6px
-                                  ),
+                        )
+                      else if (_cases.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 32),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.03),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.folder_open_rounded,
+                                  size: 48, color: Color(0xFF887775)),
+                              SizedBox(height: 12),
+                              Text(
+                                'No data exists',
+                                style: TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1A1310),
                                 ),
                               ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    effectiveButtonText,
-                                    textAlign: TextAlign.center,
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    style: const TextStyle(
-                                      fontFamily: 'Outfit',
-                                      color: Colors.white,
-                                      fontSize: 16, // Exact Size: 16px
-                                      fontWeight: FontWeight.w400, // Exact Weight: 400 Regular
-                                      letterSpacing: 0.16, // Exact Letter Spacing: 0.16px
-                                      height: 1.0, // Exact Line Height: 100%
-                                    ),
-                                  ),
-
-                                  const SizedBox(width: 8), // Exact Gap: 8px
-
-                                  // Icon: (Width 16px x Height 16px)
-                                  const Icon(
-                                    Icons.search_rounded,
-                                    color: Colors.white,
-                                    size: 16, // Exact Size: 16px
-                                  ),
-                                ],
+                              SizedBox(height: 6),
+                              Text(
+                                'No self-service case records found for this employee account.',
+                                style: TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 13,
+                                  color: Color(0xFF666666),
+                                ),
+                                textAlign: TextAlign.center,
                               ),
-                            ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
+                        )
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _cases.length,
+                          itemBuilder: (context, index) {
+                            return _buildCaseCard(_cases[index]);
+                          },
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -287,14 +604,13 @@ class _TrackCaseScreenState extends State<TrackCaseScreen> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Back Button Container
               Align(
                 alignment: Alignment.centerLeft,
                 child: GestureDetector(
                   onTap: () => Navigator.pop(context),
                   child: Container(
-                    width: 44, // Exact Width: 44px
-                    height: 44, // Exact Height: 44px
+                    width: 44,
+                    height: 44,
                     padding: const EdgeInsets.fromLTRB(6, 1, 6, 1),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.14),
@@ -308,8 +624,6 @@ class _TrackCaseScreenState extends State<TrackCaseScreen> {
                   ),
                 ),
               ),
-
-              // Title Text: "TRACK CASE"
               const SizedBox(
                 height: 15,
                 child: Center(

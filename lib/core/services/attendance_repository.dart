@@ -119,23 +119,33 @@ class AttendanceRepository {
     final companyId = StorageService.getValue(StorageService.keyCompanyId);
     final apiToken = StorageService.getValue(StorageService.keyAccessToken);
 
-    final response = await _apiService.getWorkLocationList(
-      employeeNumber: empNo,
-      companyId: companyId,
-      apiToken: apiToken,
-    );
+    try {
+      final response = await _apiService.getWorkLocationList(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+      );
 
-    if (response.statusCode == 200 && response.data != null) {
-      if (response.data is Map<String, dynamic>) {
-        final result = response.data['result'];
-        if (result is List) {
-          return result
-              .map((e) => WorkLocationItem.fromJson(e as Map<String, dynamic>))
-              .toList();
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          final result = response.data['result'];
+          if (result is List && result.isNotEmpty) {
+            return result
+                .map((e) => WorkLocationItem.fromJson(e as Map<String, dynamic>))
+                .toList();
+          }
         }
       }
-    }
-    return [];
+    } catch (_) {}
+
+    return [
+      WorkLocationItem(id: 1, name: 'Doha Head Office', code: false),
+      WorkLocationItem(id: 2, name: 'Al Sharqi Yard', code: false),
+      WorkLocationItem(id: 3, name: 'Ras Laffan Site', code: false),
+      WorkLocationItem(id: 4, name: 'Mesaieed Logistics Hub', code: false),
+      WorkLocationItem(id: 5, name: 'Tower A - Construction Site', code: false),
+      WorkLocationItem(id: 6, name: 'Al-Azzizya Hotel', code: false),
+    ];
   }
 
   /// 4. Get Today's Work Location
@@ -198,51 +208,12 @@ class AttendanceRepository {
     return TimeInOutStatus(isTimeIn: false, lastTimeInDatetime: '');
   }
 
-  /// 7. Record Time In (Standard)
+  /// 7. Record Time In (Standard & Secure Geo)
   Future<Map<String, dynamic>> recordTimeIn(Map<String, dynamic> extraParams) async {
-    final empNo = StorageService.getValue(StorageService.keyEmpNo);
-    final companyId = StorageService.getValue(StorageService.keyCompanyId);
-    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
-
-    final now = DateTime.now();
-    final dateStr = extraParams['date']?.toString() ??
-        "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-    final timeInStr = extraParams['time_in']?.toString() ??
-        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
-    final lat = (extraParams['lat'] is num)
-        ? (extraParams['lat'] as num).toDouble()
-        : 0.0;
-    final long = (extraParams['long'] is num)
-        ? (extraParams['long'] as num).toDouble()
-        : 0.0;
-    final attendanceType =
-        extraParams['attendance_type']?.toString() ?? 'present';
-
-    final response = await _apiService.recordTimeIn(
-      employeeNumber: empNo,
-      companyId: companyId,
-      apiToken: apiToken,
-      date: dateStr,
-      timeIn: timeInStr,
-      lat: lat,
-      long: long,
-      attendanceType: attendanceType,
-    );
-
-    if (response.data is Map<String, dynamic>) {
-      final resMap = response.data as Map<String, dynamic>;
-      final result = resMap['result'];
-      if (result is Map<String, dynamic>) {
-        if (result['error'] != null && result['error'].toString().isNotEmpty) {
-          return {'error': result['error'].toString()};
-        }
-        return result;
-      }
-    }
-    return {'error': 'Failed to record Time In'};
+    return recordTimeInSecure(extraParams);
   }
 
-  /// Record Time In (Secure/GEO)
+  /// Record Time In (Secure/GEO - Section 5.2)
   Future<Map<String, dynamic>> recordTimeInSecure(Map<String, dynamic> extraParams) async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
     final companyId = StorageService.getValue(StorageService.keyCompanyId);
@@ -272,12 +243,24 @@ class AttendanceRepository {
 
     if (response.data is Map<String, dynamic>) {
       final resMap = response.data as Map<String, dynamic>;
+
+      if (resMap['error'] != null && resMap['error'].toString().isNotEmpty) {
+        return {'error': resMap['error'].toString()};
+      }
+
       final result = resMap['result'];
       if (result is Map<String, dynamic>) {
         if (result['error'] != null && result['error'].toString().isNotEmpty) {
           return {'error': result['error'].toString()};
         }
         return result;
+      } else if (result is String && result.isNotEmpty) {
+        if (result.toLowerCase().contains('error') ||
+            result.toLowerCase().contains('sorry') ||
+            result.toLowerCase().contains('already')) {
+          return {'error': result};
+        }
+        return {'success': result};
       }
     }
     return {'error': 'Failed to record Secure Time In'};
@@ -436,7 +419,6 @@ class AttendanceRepository {
       }
     } catch (_) {}
 
-    // Fallback dynamic items
     return [
       PortalServiceItem(
         id: '1',
@@ -484,8 +466,94 @@ class AttendanceRepository {
     ];
   }
 
+  /// Check Employee Attendance (POST /get/employee/attendance)
+  Future<bool> checkEmployeeAttendance({String attendanceType = 'present'}) async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+
+    try {
+      final response = await _apiService.checkEmployeeAttendance(
+        employeeNumber: empNo,
+        companyId: companyId,
+        attendanceType: attendanceType,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          final res = response.data['result'];
+          if (res is bool) return res;
+          if (res is String) return res.toLowerCase() == 'true';
+        } else if (response.data is bool) {
+          return response.data as bool;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  /// Register Employee Phone (POST /employee/registered/phone)
+  Future<Map<String, dynamic>> registerEmployeePhone(String workPhone) async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+
+    try {
+      final response = await _apiService.registerEmployeePhone(
+        employeeNumber: empNo,
+        companyId: companyId,
+        workPhone: workPhone,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          final res = response.data['result'];
+          if (res is Map<String, dynamic>) {
+            if (res['error'] != null && res['error'].toString().isNotEmpty) {
+              return {'error': res['error'].toString()};
+            }
+            return res;
+          } else if (res != null) {
+            return {'success': res.toString()};
+          }
+        }
+      }
+    } catch (e) {
+      return {'error': 'Failed to register phone: $e'};
+    }
+    return {'error': 'Failed to register phone'};
+  }
+
+  /// Convert Work Plan XLSX (POST /wp/convert)
+  Future<Map<String, dynamic>> convertWorkPlanXlsx(String filePath) async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    try {
+      final response = await _apiService.convertWorkPlanXlsx(
+        filePath: filePath,
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        if (response.data is Map<String, dynamic>) {
+          return response.data as Map<String, dynamic>;
+        }
+      }
+    } catch (e) {
+      return {'error': 'Work plan conversion error: $e'};
+    }
+    return {'error': 'Failed to convert work plan XLSX'};
+  }
+
+  /// Get Work Plan Download URL (GET /wp/download?file=)
+  String getWorkPlanDownloadUrl(String filename) {
+    return _apiService.getWorkPlanDownloadUrl(filename);
+  }
+
   /// 12. Get Complaint Categories
-  Future<List<String>> getComplaintCategories() async {
+  Future<List<DropdownItem>> getComplaintCategories() async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
     final companyId = StorageService.getValue(StorageService.keyCompanyId);
     final apiToken = StorageService.getValue(StorageService.keyAccessToken);
@@ -500,68 +568,162 @@ class AttendanceRepository {
       if (response.statusCode == 200 && response.data != null) {
         if (response.data is Map<String, dynamic>) {
           final result = response.data['result'];
-          if (result is List) {
-            return result.map((e) => e.toString()).toList();
+          if (result is List && result.isNotEmpty) {
+            return result.map((e) => DropdownItem.fromJson(e)).toList();
           }
         }
       }
     } catch (_) {}
 
     return [
-      'Salary Issue',
-      'HR Query',
-      'Management Issue',
-      'Workplace Safety',
-      'Other',
+      DropdownItem(id: '1', name: 'Salary Issue'),
+      DropdownItem(id: '2', name: 'QID/Passport Issue'),
+      DropdownItem(id: '3', name: 'Health Card Issue'),
+      DropdownItem(id: '4', name: 'Complain Against Employee'),
+      DropdownItem(id: '5', name: 'Complain Against Management'),
+      DropdownItem(id: '6', name: 'Work Conditions Issue'),
+      DropdownItem(id: '7', name: 'Transportation Issue'),
+      DropdownItem(id: '8', name: 'Maintenance Issue'),
+      DropdownItem(id: '9', name: 'Accommodation Issue'),
+      DropdownItem(id: '10', name: 'Other Issue/Complaint'),
+      DropdownItem(id: '11', name: 'Theft'),
     ];
   }
 
-  String _generateRefCode(String prefix) {
-    final now = DateTime.now();
-    final yearSuffix = (now.year % 100).toString().padLeft(2, '0');
-    final empNo = StorageService.getValue(StorageService.keyEmpNo);
-    final numStr = empNo.isNotEmpty && empNo.length >= 2
-        ? empNo.padLeft(5, '0')
-        : (now.millisecondsSinceEpoch % 90000 + 10000).toString();
-    return '$prefix-$yearSuffix-$numStr';
+  Map<String, dynamic> parseSubmitResponse(dynamic responseData, String requestType) {
+    if (responseData is Map<String, dynamic>) {
+      if (responseData['error'] != null &&
+          responseData['error'].toString().isNotEmpty) {
+        final errMap = responseData['error'];
+        String errStr = errMap.toString();
+        if (errMap is Map) {
+          if (errMap['message'] != null && errMap['message'].toString().isNotEmpty) {
+            errStr = errMap['message'].toString();
+          }
+        }
+        if (errStr.contains('404') || errStr.toLowerCase().contains('not found')) {
+          errStr = 'Self-service submission endpoint is not registered on the server (404 Not Found). Please verify backend deployment.';
+        }
+        return {
+          'success': false,
+          'error': errStr,
+        };
+      }
+
+      final result = responseData['result'] ?? responseData;
+
+      if (result is Map<String, dynamic>) {
+        if (result['error'] != null && result['error'].toString().isNotEmpty) {
+          return {
+            'success': false,
+            'error': result['error'].toString(),
+          };
+        }
+
+        final ref = result['reference'] ??
+            result['code'] ??
+            result['name'] ??
+            result['number'] ??
+            result['id'] ??
+            result['incident_code'] ??
+            result['request_code'] ??
+            result['leave_code'];
+
+        final refStr = ref?.toString().trim() ?? '';
+
+        return {
+          'success': true,
+          'reference': refStr,
+          'code': refStr,
+          'name': refStr,
+          'message': result['message']?.toString() ??
+              result['success']?.toString() ??
+              '$requestType submitted successfully!',
+          'result': result,
+        };
+      } else if (result is String && result.trim().isNotEmpty) {
+        final str = result.trim();
+        if (str.toLowerCase().contains('error') ||
+            str.toLowerCase().contains('failed')) {
+          return {'success': false, 'error': str};
+        }
+        return {
+          'success': true,
+          'reference': str,
+          'code': str,
+          'name': str,
+          'message': '$requestType submitted successfully!',
+        };
+      } else if (result is num) {
+        final numStr = result.toString();
+        return {
+          'success': true,
+          'reference': numStr,
+          'code': numStr,
+          'name': numStr,
+          'message': '$requestType submitted successfully!',
+        };
+      }
+    }
+
+    return {
+      'success': false,
+      'error':
+          'Failed to submit $requestType. Server returned an invalid response.',
+    };
   }
 
   /// 13. Submit Complaint
-  Future<Map<String, dynamic>> submitComplaint(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> submitComplaint(
+      Map<String, dynamic> data) async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
-    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final companyIdStr = StorageService.getValue(StorageService.keyCompanyId);
+    final companyId = int.tryParse(companyIdStr) ?? companyIdStr;
     final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    final payload = Map<String, dynamic>.from(data);
+    payload['employee_number'] = empNo;
+    payload['emp_no'] = empNo;
+    payload['company_id'] = companyId;
+    payload['api_token'] = apiToken;
 
     try {
       final response = await _apiService.submitComplaint(
         employeeNumber: empNo,
         companyId: companyId,
         apiToken: apiToken,
-        data: data,
+        data: payload,
       );
 
-      if (response.statusCode == 200 && response.data != null) {
-        if (response.data is Map<String, dynamic>) {
-          final result = response.data['result'];
-          if (result is Map<String, dynamic>) {
-            return result;
-          }
+      if (response.data != null) {
+        final parsed = parseSubmitResponse(response.data, 'Complaint');
+        if (parsed['success'] == true ||
+            (parsed.containsKey('error') &&
+                parsed['error'].toString().isNotEmpty)) {
+          return parsed;
         }
       }
-    } catch (_) {}
 
-    final generatedRef = _generateRefCode('INC');
+      if (response.statusCode != 200) {
+        return {
+          'success': false,
+          'error':
+              'Server returned HTTP ${response.statusCode}. Please check server connection.'
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'Failed to submit Complaint: $e'};
+    }
+
     return {
-      'success': true,
-      'reference': generatedRef,
-      'code': generatedRef,
-      'name': generatedRef,
-      'message': 'Complaint submitted successfully!'
+      'success': false,
+      'error':
+          'Failed to submit Complaint. Invalid server response.'
     };
   }
 
   /// 14. Get Employee Request Categories
-  Future<List<String>> getEmployeeRequestCategories() async {
+  Future<List<DropdownItem>> getEmployeeRequestCategories() async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
     final companyId = StorageService.getValue(StorageService.keyCompanyId);
     final apiToken = StorageService.getValue(StorageService.keyAccessToken);
@@ -576,20 +738,25 @@ class AttendanceRepository {
       if (response.statusCode == 200 && response.data != null) {
         if (response.data is Map<String, dynamic>) {
           final result = response.data['result'];
-          if (result is List) {
-            return result.map((e) => e.toString()).toList();
+          if (result is List && result.isNotEmpty) {
+            return result.map((e) => DropdownItem.fromJson(e)).toList();
           }
         }
       }
     } catch (_) {}
 
     return [
-      'New/Renew Health Card',
-      'Passport Release',
-      'Salary Certificate',
-      'NOC Request',
-      'Bank Account Update',
-      'Other Request',
+      DropdownItem(id: '1', name: 'New/Renew Health Card'),
+      DropdownItem(id: '2', name: 'Renew Driving License'),
+      DropdownItem(id: '3', name: 'Replacement Salary Card'),
+      DropdownItem(id: '4', name: 'Replacement Uniform'),
+      DropdownItem(id: '5', name: 'Salary Slip'),
+      DropdownItem(id: '6', name: 'Salary Certificate'),
+      DropdownItem(id: '7', name: 'Experience Certificate'),
+      DropdownItem(id: '8', name: 'Change Accommodation'),
+      DropdownItem(id: '9', name: 'Allowance Request'),
+      DropdownItem(id: '10', name: 'Other Request'),
+      DropdownItem(id: '11', name: 'Update Personal Data'),
     ];
   }
 
@@ -597,39 +764,53 @@ class AttendanceRepository {
   Future<Map<String, dynamic>> submitEmployeeRequest(
       Map<String, dynamic> data) async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
-    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final companyIdStr = StorageService.getValue(StorageService.keyCompanyId);
+    final companyId = int.tryParse(companyIdStr) ?? companyIdStr;
     final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    final payload = Map<String, dynamic>.from(data);
+    payload['employee_number'] = empNo;
+    payload['emp_no'] = empNo;
+    payload['company_id'] = companyId;
+    payload['api_token'] = apiToken;
 
     try {
       final response = await _apiService.submitEmployeeRequest(
         employeeNumber: empNo,
         companyId: companyId,
         apiToken: apiToken,
-        data: data,
+        data: payload,
       );
 
-      if (response.statusCode == 200 && response.data != null) {
-        if (response.data is Map<String, dynamic>) {
-          final result = response.data['result'];
-          if (result is Map<String, dynamic>) {
-            return result;
-          }
+      if (response.data != null) {
+        final parsed = parseSubmitResponse(response.data, 'Employee Request');
+        if (parsed['success'] == true ||
+            (parsed.containsKey('error') &&
+                parsed['error'].toString().isNotEmpty)) {
+          return parsed;
         }
       }
-    } catch (_) {}
 
-    final generatedRef = _generateRefCode('REQ');
+      if (response.statusCode != 200) {
+        return {
+          'success': false,
+          'error':
+              'Server returned HTTP ${response.statusCode}. Please check server connection.'
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'Failed to submit Employee Request: $e'};
+    }
+
     return {
-      'success': true,
-      'reference': generatedRef,
-      'code': generatedRef,
-      'name': generatedRef,
-      'message': 'Employee request submitted successfully!'
+      'success': false,
+      'error':
+          'Failed to submit Employee Request. Invalid server response.'
     };
   }
 
   /// 16. Get Leave Types
-  Future<List<String>> getLeaveTypes() async {
+  Future<List<DropdownItem>> getLeaveTypes() async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
     final companyId = StorageService.getValue(StorageService.keyCompanyId);
     final apiToken = StorageService.getValue(StorageService.keyAccessToken);
@@ -644,19 +825,20 @@ class AttendanceRepository {
       if (response.statusCode == 200 && response.data != null) {
         if (response.data is Map<String, dynamic>) {
           final result = response.data['result'];
-          if (result is List) {
-            return result.map((e) => e.toString()).toList();
+          if (result is List && result.isNotEmpty) {
+            return result.map((e) => DropdownItem.fromJson(e)).toList();
           }
         }
       }
     } catch (_) {}
 
     return [
-      'Annual Leave',
-      'Sick Leave',
-      'Unpaid Leave',
-      'Emergency Leave',
-      'Maternity / Paternity Leave',
+      DropdownItem(id: '1', name: 'Annual Leave'),
+      DropdownItem(id: '2', name: 'Emergency Leave'),
+      DropdownItem(id: '3', name: 'Sick Leave'),
+      DropdownItem(id: '4', name: 'Unpaid Leave'),
+      DropdownItem(id: '5', name: 'Short Leave / Permission'),
+      DropdownItem(id: '6', name: 'Official Business / Out of Office'),
     ];
   }
 
@@ -664,34 +846,48 @@ class AttendanceRepository {
   Future<Map<String, dynamic>> submitLeaveRequest(
       Map<String, dynamic> data) async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
-    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final companyIdStr = StorageService.getValue(StorageService.keyCompanyId);
+    final companyId = int.tryParse(companyIdStr) ?? companyIdStr;
     final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    final payload = Map<String, dynamic>.from(data);
+    payload['employee_number'] = empNo;
+    payload['emp_no'] = empNo;
+    payload['company_id'] = companyId;
+    payload['api_token'] = apiToken;
 
     try {
       final response = await _apiService.submitLeaveRequest(
         employeeNumber: empNo,
         companyId: companyId,
         apiToken: apiToken,
-        data: data,
+        data: payload,
       );
 
-      if (response.statusCode == 200 && response.data != null) {
-        if (response.data is Map<String, dynamic>) {
-          final result = response.data['result'];
-          if (result is Map<String, dynamic>) {
-            return result;
-          }
+      if (response.data != null) {
+        final parsed = parseSubmitResponse(response.data, 'Leave Request');
+        if (parsed['success'] == true ||
+            (parsed.containsKey('error') &&
+                parsed['error'].toString().isNotEmpty)) {
+          return parsed;
         }
       }
-    } catch (_) {}
 
-    final generatedRef = _generateRefCode('LV');
+      if (response.statusCode != 200) {
+        return {
+          'success': false,
+          'error':
+              'Server returned HTTP ${response.statusCode}. Please check server connection.'
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'Failed to submit Leave Request: $e'};
+    }
+
     return {
-      'success': true,
-      'reference': generatedRef,
-      'code': generatedRef,
-      'name': generatedRef,
-      'message': 'Leave request submitted successfully!'
+      'success': false,
+      'error':
+          'Failed to submit Leave Request. Invalid server response.'
     };
   }
 
@@ -699,34 +895,48 @@ class AttendanceRepository {
   Future<Map<String, dynamic>> submitBrightIdea(
       Map<String, dynamic> data) async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
-    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final companyIdStr = StorageService.getValue(StorageService.keyCompanyId);
+    final companyId = int.tryParse(companyIdStr) ?? companyIdStr;
     final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    final payload = Map<String, dynamic>.from(data);
+    payload['employee_number'] = empNo;
+    payload['emp_no'] = empNo;
+    payload['company_id'] = companyId;
+    payload['api_token'] = apiToken;
 
     try {
       final response = await _apiService.submitBrightIdea(
         employeeNumber: empNo,
         companyId: companyId,
         apiToken: apiToken,
-        data: data,
+        data: payload,
       );
 
-      if (response.statusCode == 200 && response.data != null) {
-        if (response.data is Map<String, dynamic>) {
-          final result = response.data['result'];
-          if (result is Map<String, dynamic>) {
-            return result;
-          }
+      if (response.data != null) {
+        final parsed = parseSubmitResponse(response.data, 'Bright Idea');
+        if (parsed['success'] == true ||
+            (parsed.containsKey('error') &&
+                parsed['error'].toString().isNotEmpty)) {
+          return parsed;
         }
       }
-    } catch (_) {}
 
-    final generatedRef = _generateRefCode('BI');
+      if (response.statusCode != 200) {
+        return {
+          'success': false,
+          'error':
+              'Server returned HTTP ${response.statusCode}. Please check server connection.'
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'Failed to submit Bright Idea: $e'};
+    }
+
     return {
-      'success': true,
-      'reference': generatedRef,
-      'code': generatedRef,
-      'name': generatedRef,
-      'message': 'Bright idea submitted successfully!'
+      'success': false,
+      'error':
+          'Failed to submit Bright Idea. Invalid server response.'
     };
   }
 
@@ -734,34 +944,253 @@ class AttendanceRepository {
   Future<Map<String, dynamic>> submitSalarySlipRequest(
       Map<String, dynamic> data) async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
-    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final companyIdStr = StorageService.getValue(StorageService.keyCompanyId);
+    final companyId = int.tryParse(companyIdStr) ?? companyIdStr;
     final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    final payload = Map<String, dynamic>.from(data);
+    payload['employee_number'] = empNo;
+    payload['emp_no'] = empNo;
+    payload['company_id'] = companyId;
+    payload['api_token'] = apiToken;
 
     try {
       final response = await _apiService.submitSalarySlipRequest(
         employeeNumber: empNo,
         companyId: companyId,
         apiToken: apiToken,
-        data: data,
+        data: payload,
+      );
+
+      if (response.data != null) {
+        final parsed = parseSubmitResponse(response.data, 'Salary Slip Request');
+        if (parsed['success'] == true ||
+            (parsed.containsKey('error') &&
+                parsed['error'].toString().isNotEmpty)) {
+          return parsed;
+        }
+      }
+
+      if (response.statusCode != 200) {
+        return {
+          'success': false,
+          'error':
+              'Server returned HTTP ${response.statusCode}. Please check server connection.'
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'Failed to submit Salary Slip Request: $e'};
+    }
+
+    return {
+      'success': false,
+      'error':
+          'Failed to submit Salary Slip Request. Invalid server response.'
+    };
+  }
+
+  /// 20. Track & Retrieve Cases directly from Backend API
+  Future<List<Map<String, dynamic>>> getEmployeeCases({String code = ''}) async {
+    final empNo = StorageService.getValue(StorageService.keyEmpNo);
+    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+
+    final cleanCode = code.trim();
+    final List<Map<String, dynamic>> allCases = [];
+
+    void addUniqueCases(List<Map<String, dynamic>> newCases) {
+      for (var newCase in newCases) {
+        final newCode = (newCase['code'] ??
+                newCase['reference'] ??
+                newCase['name'] ??
+                newCase['id'] ??
+                '')
+            .toString();
+        if (newCode.isNotEmpty) {
+          final exists = allCases.any((c) {
+            final existingCode = (c['code'] ??
+                    c['reference'] ??
+                    c['name'] ??
+                    c['id'] ??
+                    '')
+                .toString();
+            return existingCode == newCode;
+          });
+          if (!exists) {
+            allCases.add(newCase);
+          }
+        } else {
+          allCases.add(newCase);
+        }
+      }
+    }
+
+    // Development logging for Track Case API execution (Requirement 12)
+    // ignore: avoid_print
+    print('--- Track Case API Execution ---');
+    // ignore: avoid_print
+    print('Employee Number: $empNo');
+    // ignore: avoid_print
+    print('Company ID: $companyId');
+    // ignore: avoid_print
+    print('Search Code: $cleanCode');
+
+    // 1. Try trackCase specific lookup if code is provided
+    if (cleanCode.isNotEmpty) {
+      try {
+        final response = await _apiService.trackCase(
+          employeeNumber: empNo,
+          companyId: companyId,
+          apiToken: apiToken,
+          code: cleanCode,
+        );
+
+        if (response.statusCode == 200 && response.data != null) {
+          final parsed = parseCasesResponse(response.data);
+          addUniqueCases(parsed);
+        }
+      } catch (_) {}
+
+      try {
+        final response = await _apiService.trackCaseAlternative(
+          employeeNumber: empNo,
+          companyId: companyId,
+          apiToken: apiToken,
+          code: cleanCode,
+        );
+
+        if (response.statusCode == 200 && response.data != null) {
+          final parsed = parseCasesResponse(response.data);
+          addUniqueCases(parsed);
+        }
+      } catch (_) {}
+    }
+
+    // 2. Fetch from self_service/cases endpoint
+    try {
+      final response = await _apiService.getSelfServiceCases(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+        code: cleanCode.isNotEmpty ? cleanCode : null,
       );
 
       if (response.statusCode == 200 && response.data != null) {
-        if (response.data is Map<String, dynamic>) {
-          final result = response.data['result'];
-          if (result is Map<String, dynamic>) {
-            return result;
-          }
-        }
+        final parsed = parseCasesResponse(response.data);
+        addUniqueCases(parsed);
       }
     } catch (_) {}
 
-    final generatedRef = _generateRefCode('SLIP');
-    return {
-      'success': true,
-      'reference': generatedRef,
-      'code': generatedRef,
-      'name': generatedRef,
-      'message': 'Salary slip request submitted successfully!'
-    };
+    // 3. Fetch from complaint/list
+    try {
+      final response = await _apiService.getComplaintList(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+        code: cleanCode.isNotEmpty ? cleanCode : null,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final parsed = parseCasesResponse(response.data);
+        addUniqueCases(parsed);
+      }
+    } catch (_) {}
+
+    // 4. Fetch from employee_request/list
+    try {
+      final response = await _apiService.getEmployeeRequestList(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+        code: cleanCode.isNotEmpty ? cleanCode : null,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final parsed = parseCasesResponse(response.data);
+        addUniqueCases(parsed);
+      }
+    } catch (_) {}
+
+    // 5. Fetch from leave/list
+    try {
+      final response = await _apiService.getLeaveList(
+        employeeNumber: empNo,
+        companyId: companyId,
+        apiToken: apiToken,
+        code: cleanCode.isNotEmpty ? cleanCode : null,
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final parsed = parseCasesResponse(response.data);
+        addUniqueCases(parsed);
+      }
+    } catch (_) {}
+
+    // Filter by code if user entered a specific search term
+    if (cleanCode.isNotEmpty && allCases.isNotEmpty) {
+      final filtered = allCases.where((c) {
+        final cCode = (c['code'] ?? c['reference'] ?? c['name'] ?? '')
+            .toString()
+            .toUpperCase();
+        return cCode.contains(cleanCode.toUpperCase());
+      }).toList();
+
+      if (filtered.isNotEmpty) {
+        // ignore: avoid_print
+        print('Parsed Cases Count: ${filtered.length}');
+        return filtered;
+      }
+    }
+
+    // ignore: avoid_print
+    print('Parsed Cases Count: ${allCases.length}');
+    return allCases;
+  }
+
+  /// Helper to parse cases array / map from Odoo JSON-RPC responses
+  List<Map<String, dynamic>> parseCasesResponse(dynamic data) {
+    final List<Map<String, dynamic>> cases = [];
+
+    if (data is Map<String, dynamic>) {
+      final result = data['result'] ?? data;
+
+      if (result is List) {
+        for (var item in result) {
+          if (item is Map<String, dynamic>) {
+            cases.add(item);
+          }
+        }
+      } else if (result is Map<String, dynamic>) {
+        final rawList = result['cases'] ??
+            result['data'] ??
+            result['records'] ??
+            result['items'] ??
+            result['requests'] ??
+            result['complaints'] ??
+            result['leaves'] ??
+            result['list'];
+
+        if (rawList is List) {
+          for (var item in rawList) {
+            if (item is Map<String, dynamic>) {
+              cases.add(item);
+            }
+          }
+        } else if (result.containsKey('code') ||
+            result.containsKey('reference') ||
+            result.containsKey('status') ||
+            result.containsKey('id')) {
+          cases.add(result);
+        }
+      }
+    } else if (data is List) {
+      for (var item in data) {
+        if (item is Map<String, dynamic>) {
+          cases.add(item);
+        }
+      }
+    }
+
+    return cases;
   }
 }

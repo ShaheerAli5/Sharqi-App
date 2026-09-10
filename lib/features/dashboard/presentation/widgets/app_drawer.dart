@@ -189,12 +189,15 @@ class AppDrawer extends StatelessWidget {
                         width: double.infinity,
                         height: 48,
                         child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pushNamedAndRemoveUntil(
-                              context,
-                              AppRoutes.signIn,
-                              (route) => false,
-                            );
+                          onPressed: () async {
+                            await StorageService.clear();
+                            if (context.mounted) {
+                              Navigator.pushNamedAndRemoveUntil(
+                                context,
+                                AppRoutes.signIn,
+                                (route) => false,
+                              );
+                            }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor:

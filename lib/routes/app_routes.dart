@@ -26,6 +26,7 @@ class AppRoutes {
   static const String home = '/home';
   static const String dashboard = '/dashboard';
   static const String selfServiceWeb = '/self-service-web';
+  static const String selfServiceWebPortal = '/self-service-web-portal';
   static const String complaintForm = '/complaint-form';
   static const String trackCase = '/track-case';
   static const String employeeRequestForm = '/employee-request-form';
@@ -45,6 +46,7 @@ class AppRoutes {
     home: (context) => const HomeScreen(),
     dashboard: (context) => const DashboardScreen(),
     selfServiceWeb: (context) => const SelfServicePortalScreen(),
+    selfServiceWebPortal: (context) => const SelfServicePortalScreen(),
     complaintForm: (context) => const ComplaintFormScreen(),
     trackCase: (context) => const TrackCaseScreen(),
     employeeRequestForm: (context) => const EmployeeRequestFormScreen(),

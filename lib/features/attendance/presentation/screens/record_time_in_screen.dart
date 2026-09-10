@@ -6,7 +6,6 @@ import '../../../../core/services/attendance_repository.dart';
 import '../../../../core/services/location_service.dart';
 import '../../../../core/services/storage_service.dart';
 import '../../../../data/models/app_models.dart';
-import '../../../../routes/app_routes.dart';
 import '../../../dashboard/presentation/widgets/app_drawer.dart';
 
 class RecordTimeInScreen extends StatefulWidget {
@@ -26,6 +25,10 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
   bool _isLoadingLocations = false;
   bool _isSubmitting = false;
   bool _isAlreadyTimeIn = false;
+  String? _checkInTimeDisplay;
+
+  bool _isDetectingLocation = false;
+  String? _detectedLocationName;
 
   late Timer _timer;
   late DateTime _now;
@@ -59,8 +62,14 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
 
       if (status.isTimeIn) {
         _isAlreadyTimeIn = true;
+        _checkInTimeDisplay = _formatCheckInTime(status.lastTimeInDatetime, _now);
         if (mounted) {
-          _showAlreadyCheckedInDialog();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('You are already checked in at $_checkInTimeDisplay.'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
         }
       }
 
@@ -73,6 +82,9 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
       if (_selectedLocation == null && _locations.isNotEmpty) {
         _selectedLocation = _locations.first;
       }
+
+      // Automatically detect user's current GPS location on screen open
+      await _detectCurrentLocation();
     } catch (_) {
     } finally {
       if (mounted) {
@@ -81,38 +93,81 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
     }
   }
 
-  void _showAlreadyCheckedInDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Already Checked In',
-          style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'You have already recorded Time-In for today.',
-          style: TextStyle(fontFamily: 'Outfit'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              if (Navigator.canPop(context)) {
-                Navigator.pop(context); // Exit screen
-              } else {
-                Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-              }
-            },
-            child: const Text(
-              'OK',
-              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+  Future<void> _detectCurrentLocation() async {
+    if (!mounted) return;
+    setState(() => _isDetectingLocation = true);
+    try {
+      final locResult = await LocationService.getCurrentLocation();
+      if (!mounted) return;
+      if (locResult.isSuccess) {
+        if (locResult.address != null && locResult.address!.trim().isNotEmpty) {
+          setState(() {
+            _detectedLocationName = locResult.address;
+          });
+        } else {
+          setState(() {
+            _detectedLocationName =
+                '${locResult.latitude.toStringAsFixed(6)}, ${locResult.longitude.toStringAsFixed(6)}';
+          });
+        }
+      } else {
+        if (!_isAlreadyTimeIn && locResult.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(locResult.errorMessage!),
+              backgroundColor: Colors.red.shade700,
             ),
-          ),
-        ],
-      ),
-    );
+          );
+        }
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) {
+        setState(() => _isDetectingLocation = false);
+      }
+    }
+  }
+
+  String _formatCheckInTime(String? rawTime, DateTime fallbackDateTime) {
+    if (rawTime != null && rawTime.trim().isNotEmpty) {
+      final trimmed = rawTime.trim();
+
+      if (trimmed.toUpperCase().contains('AM') || trimmed.toUpperCase().contains('PM')) {
+        return trimmed;
+      }
+
+      final parsed = DateTime.tryParse(trimmed);
+      if (parsed != null) {
+        return _format12HourTime(parsed);
+      }
+
+      final spaceSplit = trimmed.split(' ');
+      final timeStr = spaceSplit.length > 1 ? spaceSplit.last : spaceSplit.first;
+      final timeParts = timeStr.split(':');
+      if (timeParts.length >= 2) {
+        final hour = int.tryParse(timeParts[0]);
+        final minute = int.tryParse(timeParts[1]);
+        if (hour != null && minute != null) {
+          final dt = DateTime(
+            fallbackDateTime.year,
+            fallbackDateTime.month,
+            fallbackDateTime.day,
+            hour,
+            minute,
+          );
+          return _format12HourTime(dt);
+        }
+      }
+    }
+    return _format12HourTime(fallbackDateTime);
+  }
+
+  String _format12HourTime(DateTime dt) {
+    final hourOfPeriod = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final hour = hourOfPeriod.toString().padLeft(2, '0');
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
   }
 
   @override
@@ -160,6 +215,23 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                ListTile(
+                  leading: const Icon(Icons.my_location_rounded, color: AppColors.primary),
+                  title: const Text(
+                    'Detect My Current Location',
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _detectCurrentLocation();
+                  },
+                ),
+                const Divider(height: 1, color: AppColors.divider),
                 Flexible(
                   child: _isLoadingLocations
                       ? const Center(
@@ -202,6 +274,7 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                               onTap: () {
                                 setState(() {
                                   _selectedLocation = loc;
+                                  _detectedLocationName = loc.name;
                                 });
                                 Navigator.pop(context);
                               },
@@ -219,18 +292,17 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
 
   Future<void> _onTimeIn() async {
     if (_isAlreadyTimeIn) {
-      _showAlreadyCheckedInDialog();
-      return;
-    }
-
-    if (_selectedLocation == null) {
+      final timeStr = _checkInTimeDisplay ?? _formatCheckInTime(null, _now);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a work location')),
+        SnackBar(
+          content: Text('You are already checked in at $timeStr.'),
+          backgroundColor: AppColors.primary,
+        ),
       );
       return;
     }
 
-    // 1. Acquire high-accuracy GPS coordinates
+    // 1. Acquire accurate GPS coordinates at exact time of check-in
     setState(() => _isSubmitting = true);
     final locationResult = await LocationService.getCurrentLocation();
     if (!locationResult.isSuccess) {
@@ -238,12 +310,21 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(locationResult.errorMessage ?? 'GPS acquisition failed'),
+            content: Text(locationResult.errorMessage ??
+                'Unable to detect your current location. Please enable GPS and try again.'),
             backgroundColor: Colors.red.shade700,
           ),
         );
       }
       return;
+    }
+
+    if (locationResult.address != null &&
+        locationResult.address!.trim().isNotEmpty) {
+      _detectedLocationName = locationResult.address;
+    } else {
+      _detectedLocationName =
+          '${locationResult.latitude.toStringAsFixed(6)}, ${locationResult.longitude.toStringAsFixed(6)}';
     }
 
     // 2. Prompt confirmation dialog
@@ -256,9 +337,9 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
           'Confirm Check-In',
           style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold),
         ),
-        content: const Text(
-          'Are you sure you want to record time in?',
-          style: TextStyle(fontFamily: 'Outfit'),
+        content: Text(
+          'Are you sure you want to record time in at ${_detectedLocationName ?? "current GPS location"}?',
+          style: const TextStyle(fontFamily: 'Outfit'),
         ),
         actions: [
           TextButton(
@@ -280,15 +361,12 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
       return;
     }
 
-    // 3. Dispatch Record Time In API call
+    // 3. Dispatch Secure Geo Check In API call (Section 5.2 POST /alsharqi/attendance/check/in/secure)
     try {
-      final dateStr =
-          "${_now.year}-${_now.month.toString().padLeft(2, '0')}-${_now.day.toString().padLeft(2, '0')}";
       final timeInStr =
           "${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}";
 
-      final res = await _attendanceRepository.recordTimeIn({
-        "date": dateStr,
+      final res = await _attendanceRepository.recordTimeInSecure({
         "time_in": timeInStr,
         "lat": locationResult.latitude,
         "long": locationResult.longitude,
@@ -297,18 +375,44 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
 
       if (!mounted) return;
 
-      // Check if backend returned an error
+      // Check if backend returned an error (e.g. 400m distance error, no area configured, already checked in)
       if (res['error'] != null && res['error'].toString().isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(res['error'].toString()),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
+        final errText = res['error'].toString();
+
+        if (errText.toLowerCase().contains('already checked in')) {
+          final checkInTimeFormatted = _formatCheckInTime(timeInStr, _now);
+          setState(() {
+            _isAlreadyTimeIn = true;
+            _checkInTimeDisplay = checkInTimeFormatted;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('You are already checked in at $checkInTimeFormatted.'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        } else {
+          // Display actual backend error (e.g. 850 meters away / no area configured)
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errText),
+              backgroundColor: Colors.red.shade700,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
         return;
       }
 
-      // 4. Update area if selected location != scheduled area ID
+      // Extract time from backend response if available, or use the timeInStr sent
+      final serverTimeStr = res['time_in']?.toString() ??
+          res['last_time_in_datetime']?.toString() ??
+          res['check_in_time']?.toString() ??
+          res['time']?.toString();
+      final checkInTimeFormatted =
+          _formatCheckInTime(serverTimeStr ?? timeInStr, _now);
+
+      // Update area if selected location != scheduled area ID
       final timeInId = res['id'] ?? res['time_in_id'];
       final selectedId = _selectedLocation is WorkLocationItem
           ? _selectedLocation.id
@@ -324,17 +428,17 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
       }
 
       if (mounted) {
+        setState(() {
+          _isAlreadyTimeIn = true;
+          _checkInTimeDisplay = checkInTimeFormatted;
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Time In recorded successfully!'),
+          SnackBar(
+            content: Text('You are checked in at $checkInTimeFormatted.'),
             backgroundColor: AppColors.primary,
           ),
         );
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        } else {
-          Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -380,7 +484,11 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
     );
 
     String locationName = 'Select Work Location';
-    if (_selectedLocation != null) {
+    if (_isDetectingLocation) {
+      locationName = 'Detecting current location...';
+    } else if (_detectedLocationName != null && _detectedLocationName!.trim().isNotEmpty) {
+      locationName = _detectedLocationName!;
+    } else if (_selectedLocation != null) {
       if (_selectedLocation is WorkLocationItem) {
         locationName = _selectedLocation.name;
       } else if (_selectedLocation is TodayWorkLocation) {
@@ -533,10 +641,63 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                           ],
                         ),
                         const SizedBox(height: 24),
+                        if (_isAlreadyTimeIn && _checkInTimeDisplay != null) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F5E9),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFFA5D6A7),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: Color(0xFF2E7D32),
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Status: Checked In',
+                                        style: TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF2E7D32),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'You are checked in at $_checkInTimeDisplay.',
+                                        style: const TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: Color(0xFF1B5E20),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
                         Column(
                           children: [
                             GestureDetector(
-                              onTap: _showLocationModal,
+                              onTap: _isAlreadyTimeIn ? null : _showLocationModal,
                               child: Container(
                                 height: 44,
                                 width: double.infinity,
@@ -553,7 +714,7 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                                 child: Row(
                                   children: [
                                     const Icon(
-                                      Icons.location_on_rounded,
+                                      Icons.location_on_outlined,
                                       color: Color(0xFFC6134B),
                                       size: 24,
                                     ),
@@ -571,11 +732,20 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                                         ),
                                       ),
                                     ),
-                                    const Icon(
-                                      Icons.keyboard_arrow_down_rounded,
-                                      color: Color(0xFFC6134B),
-                                      size: 22,
-                                    ),
+                                    if (!_isAlreadyTimeIn)
+                                      Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFFC6134B),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.edit_rounded,
+                                          color: Colors.white,
+                                          size: 15,
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -637,7 +807,9 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                                   ),
                                   const SizedBox(width: 12),
                                   Text(
-                                    _formatTime(_now),
+                                    (_isAlreadyTimeIn && _checkInTimeDisplay != null)
+                                        ? _checkInTimeDisplay!
+                                        : _formatTime(_now),
                                     style: const TextStyle(
                                       fontFamily: 'Outfit',
                                       fontSize: 15,
@@ -701,13 +873,13 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                                   )
                                 : Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: const [
+                                    children: [
                                       Text(
-                                        'Time In',
+                                        _isAlreadyTimeIn ? 'Checked In' : 'Time In',
                                         textAlign: TextAlign.center,
                                         maxLines: 1,
                                         softWrap: false,
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                           fontFamily: 'Outfit',
                                           color: Colors.white,
                                           fontSize: 16,
@@ -716,9 +888,11 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                                           height: 1.0,
                                         ),
                                       ),
-                                      SizedBox(width: 8),
+                                      const SizedBox(width: 8),
                                       Icon(
-                                        Icons.arrow_forward_rounded,
+                                        _isAlreadyTimeIn
+                                            ? Icons.check_circle_outline_rounded
+                                            : Icons.arrow_forward_rounded,
                                         color: Colors.white,
                                         size: 16,
                                       ),

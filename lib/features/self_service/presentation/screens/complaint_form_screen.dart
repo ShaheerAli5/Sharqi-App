@@ -8,6 +8,9 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/attendance_repository.dart';
 import '../../../../core/services/auth_repository.dart';
 import '../../../../core/services/storage_service.dart';
+import '../../../../data/models/company_models.dart';
+import '../../../../data/models/dropdown_item.dart';
+import '../../../../data/models/work_location_item.dart';
 import '../widgets/request_success_dialog.dart';
 import '../widgets/self_service_otp_modal.dart';
 
@@ -22,37 +25,34 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
   final _formKey = GlobalKey<FormState>();
 
   // Form Fields State
-  String _selectedCompany = '';
-  final TextEditingController _employeeNoController =
-      TextEditingController();
-  final TextEditingController _employeeNameController =
-      TextEditingController();
-  final TextEditingController _employeeEmailController =
-      TextEditingController();
-  final TextEditingController _employeePhoneController =
-      TextEditingController();
+  CompanyItem? _selectedCompany;
+  final TextEditingController _employeeNoController = TextEditingController();
+  final TextEditingController _employeeNameController = TextEditingController();
+  final TextEditingController _employeeEmailController = TextEditingController();
+  final TextEditingController _employeePhoneController = TextEditingController();
 
   String _requestDateTime = '';
   late final TextEditingController _dateTimeController;
-  String _selectedCategory = 'Salary Issue';
-  final TextEditingController _incidentLocationController =
-      TextEditingController();
-  String _selectedWorkingLocation = 'Abu Sidra';
+
+  DropdownItem? _selectedCategory;
+  final TextEditingController _incidentLocationController = TextEditingController();
+  WorkLocationItem? _selectedWorkingLocation;
   bool _isAgainstPerson = false;
-  final TextEditingController _descriptionController =
-      TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
 
   PlatformFile? _attachedFile;
 
-  List<String> _companies = [];
-  List<String> _workingLocations = [];
-  List<String> _categories = [
-    'Salary Issue',
-    'HR Query',
-    'Management Issue',
-    'Workplace Safety',
-    'Other',
-  ];
+  List<CompanyItem> _companies = [];
+  bool _isLoadingCompanies = false;
+  String? _companyError;
+
+  List<WorkLocationItem> _workingLocations = [];
+  bool _isLoadingLocations = false;
+  String? _locationError;
+
+  List<DropdownItem> _categories = [];
+  bool _isLoadingCategories = false;
+  String? _categoryError;
 
   @override
   void initState() {
@@ -61,12 +61,6 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
     _requestDateTime =
         '${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')}/${now.year} ${_formatTime(now)}';
     _dateTimeController = TextEditingController(text: _requestDateTime);
-
-    final company = StorageService.getValue(StorageService.keyCompanyName);
-    if (company.isNotEmpty) {
-      _selectedCompany = company;
-      _companies = [company];
-    }
 
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
     if (empNo.isNotEmpty) {
@@ -89,38 +83,105 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
   }
 
   Future<void> _fetchApiData() async {
+    _fetchCompanies();
+    _fetchWorkingLocations();
+    _fetchCategories();
+  }
+
+  Future<void> _fetchCompanies() async {
+    setState(() {
+      _isLoadingCompanies = true;
+      _companyError = null;
+    });
+
     try {
       final compList = await AuthRepository().getCompanyList();
-      final locList = await AttendanceRepository().getWorkLocationList();
-      final catList = await AttendanceRepository().getComplaintCategories();
-
       if (mounted) {
         setState(() {
-          if (compList.isNotEmpty) {
-            _companies = compList.map((c) => c.name).toList();
-            final savedCompany =
-                StorageService.getValue(StorageService.keyCompanyName);
-            if (savedCompany.isNotEmpty && _companies.contains(savedCompany)) {
-              _selectedCompany = savedCompany;
-            } else if (_companies.isNotEmpty) {
-              _selectedCompany = _companies.first;
-            }
-          }
-          if (locList.isNotEmpty) {
-            _workingLocations = locList.map((l) => l.name).toList();
-            if (_workingLocations.isNotEmpty) {
-              _selectedWorkingLocation = _workingLocations.first;
-            }
-          }
-          if (catList.isNotEmpty) {
-            _categories = catList;
-            if (_categories.isNotEmpty) {
-              _selectedCategory = _categories.first;
-            }
+          _companies = compList;
+          _isLoadingCompanies = false;
+          final savedCompanyIdStr = StorageService.getValue(StorageService.keyCompanyId);
+          final savedCompanyName = StorageService.getValue(StorageService.keyCompanyName);
+
+          if (_companies.isNotEmpty) {
+            final match = _companies.firstWhere(
+              (c) =>
+                  c.id.toString() == savedCompanyIdStr ||
+                  c.name.toLowerCase() == savedCompanyName.toLowerCase(),
+              orElse: () => _companies.first,
+            );
+            _selectedCompany = match;
+          } else {
+            _selectedCompany = null;
           }
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingCompanies = false;
+          _companyError = 'Failed to load companies: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchWorkingLocations() async {
+    setState(() {
+      _isLoadingLocations = true;
+      _locationError = null;
+    });
+
+    try {
+      final locList = await AttendanceRepository().getWorkLocationList();
+      if (mounted) {
+        setState(() {
+          _workingLocations = locList;
+          _isLoadingLocations = false;
+          if (_workingLocations.isNotEmpty) {
+            _selectedWorkingLocation = _workingLocations.first;
+          } else {
+            _selectedWorkingLocation = null;
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingLocations = false;
+          _locationError = 'Failed to load work locations: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchCategories() async {
+    setState(() {
+      _isLoadingCategories = true;
+      _categoryError = null;
+    });
+
+    try {
+      final catList = await AttendanceRepository().getComplaintCategories();
+      if (mounted) {
+        setState(() {
+          _categories = catList;
+          _isLoadingCategories = false;
+          if (_categories.isNotEmpty) {
+            _selectedCategory = _categories.first;
+          } else {
+            _selectedCategory = null;
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingCategories = false;
+          _categoryError = 'Failed to load categories: $e';
+        });
+      }
+    }
   }
 
   String _formatTime(DateTime dt) {
@@ -202,11 +263,15 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
     });
   }
 
-  void _showSelectionModal({
+  void _showSelectionModal<T>({
     required String title,
-    required List<String> options,
-    required String currentValue,
-    required ValueChanged<String> onSelected,
+    required List<T> options,
+    required T? currentValue,
+    required String Function(T item) getDisplay,
+    required ValueChanged<T> onSelected,
+    bool isLoading = false,
+    String? errorMessage,
+    VoidCallback? onRetry,
   }) {
     showModalBottomSheet(
       context: context,
@@ -247,52 +312,102 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
                 ),
                 const SizedBox(height: 12),
                 Flexible(
-                  child: options.isEmpty
+                  child: isLoading
                       ? const Center(
                           child: Padding(
-                            padding: EdgeInsets.all(20.0),
+                            padding: EdgeInsets.all(24.0),
                             child: CircularProgressIndicator(
                               color: AppColors.primary,
                             ),
                           ),
                         )
-                      : ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: options.length,
-                          separatorBuilder: (context, index) => const Divider(
-                            height: 1,
-                            color: AppColors.divider,
-                          ),
-                          itemBuilder: (context, index) {
-                            final option = options[index];
-                            final isSelected = option == currentValue;
-                            return ListTile(
-                              title: Text(
-                                option,
-                                style: TextStyle(
-                                  fontFamily: 'Outfit',
-                                  fontSize: 15,
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                  color: isSelected
-                                      ? AppColors.primary
-                                      : const Color(0xFF1A1310),
+                      : errorMessage != null
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      errorMessage,
+                                      style: const TextStyle(
+                                        fontFamily: 'Outfit',
+                                        fontSize: 14,
+                                        color: Color(0xFFC6134B),
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    if (onRetry != null) ...[
+                                      const SizedBox(height: 12),
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          onRetry();
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primary,
+                                        ),
+                                        child: const Text('Retry'),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
-                              trailing: isSelected
-                                  ? const Icon(
-                                      Icons.check_circle,
-                                      color: AppColors.primary,
-                                    )
-                                  : null,
-                              onTap: () {
-                                onSelected(option);
-                                Navigator.pop(context);
-                              },
-                            );
-                          },
-                        ),
+                            )
+                          : options.isEmpty
+                              ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(24.0),
+                                    child: Text(
+                                      'No options available',
+                                      style: TextStyle(
+                                        fontFamily: 'Outfit',
+                                        fontSize: 14,
+                                        color: Color(0xFF888888),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : ListView.separated(
+                                  shrinkWrap: true,
+                                  itemCount: options.length,
+                                  separatorBuilder: (context, index) =>
+                                      const Divider(
+                                    height: 1,
+                                    color: AppColors.divider,
+                                  ),
+                                  itemBuilder: (context, index) {
+                                    final option = options[index];
+                                    final displayText = getDisplay(option);
+                                    final isSelected = currentValue != null &&
+                                        option == currentValue;
+                                    return ListTile(
+                                      title: Text(
+                                        displayText,
+                                        style: TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 15,
+                                          fontWeight: isSelected
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                          color: isSelected
+                                              ? AppColors.primary
+                                              : const Color(0xFF1A1310),
+                                        ),
+                                      ),
+                                      trailing: isSelected
+                                          ? const Icon(
+                                              Icons.check_circle,
+                                              color: AppColors.primary,
+                                            )
+                                          : null,
+                                      onTap: () {
+                                        onSelected(option);
+                                        Navigator.pop(context);
+                                      },
+                                    );
+                                  },
+                                ),
                 ),
               ],
             ),
@@ -356,6 +471,27 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
   }
 
   Future<void> _onConfirmDetails() async {
+    if (_selectedCompany == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select Company')),
+      );
+      return;
+    }
+
+    if (_selectedCategory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select Complaint Category')),
+      );
+      return;
+    }
+
+    if (_selectedWorkingLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select Working Location')),
+      );
+      return;
+    }
+
     final empNo = _employeeNoController.text.trim();
     if (empNo.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -364,7 +500,7 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
       return;
     }
 
-    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final companyId = (_selectedCompany?.id ?? StorageService.getValue(StorageService.keyCompanyId)).toString();
     final phone = _employeePhoneController.text.trim().isNotEmpty
         ? _employeePhoneController.text.trim()
         : StorageService.getValue(StorageService.keyPhone);
@@ -389,15 +525,34 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
           }
 
           final payload = {
-            'company': _selectedCompany,
+            'company': _selectedCompany?.name ??
+                StorageService.getValue(StorageService.keyCompanyName),
+            'company_id': int.tryParse(
+                    _selectedCompany?.id.toString() ?? '') ??
+                _selectedCompany?.id ??
+                int.tryParse(companyId) ??
+                companyId,
             'employee_number': empNo,
+            'emp_no': empNo,
             'employee_name': _employeeNameController.text.trim(),
             'employee_email': _employeeEmailController.text.trim(),
             'employee_phone': phone,
             'request_datetime': _dateTimeController.text.trim(),
-            'category': _selectedCategory,
+            'category': _selectedCategory?.name ?? '',
+            'category_id': int.tryParse(
+                    _selectedCategory?.id.toString() ?? '') ??
+                _selectedCategory?.id ??
+                1,
             'incident_location': _incidentLocationController.text.trim(),
-            'working_location': _selectedWorkingLocation,
+            'working_location': _selectedWorkingLocation?.name ?? '',
+            'working_location_id': int.tryParse(
+                    _selectedWorkingLocation?.id.toString() ?? '') ??
+                _selectedWorkingLocation?.id ??
+                1,
+            'location_id': int.tryParse(
+                    _selectedWorkingLocation?.id.toString() ?? '') ??
+                _selectedWorkingLocation?.id ??
+                1,
             'is_against_person': _isAgainstPerson,
             'description': _descriptionController.text.trim(),
             if (attachmentBase64 != null) 'attachment_base64': attachmentBase64,
@@ -482,15 +637,19 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
                           const SizedBox(height: 16),
                           _buildFieldBlock(
                             label: 'COMPANY',
+                            isRequired: true,
                             child: _buildDropdownTile(
-                              value: _selectedCompany.isNotEmpty
-                                  ? _selectedCompany
-                                  : 'Select Company',
+                              value: _selectedCompany?.name ?? 'Select Company',
+                              isLoading: _isLoadingCompanies,
                               onTap: () {
-                                _showSelectionModal(
+                                _showSelectionModal<CompanyItem>(
                                   title: 'Select Company',
                                   options: _companies,
                                   currentValue: _selectedCompany,
+                                  getDisplay: (c) => c.name,
+                                  isLoading: _isLoadingCompanies,
+                                  errorMessage: _companyError,
+                                  onRetry: _fetchCompanies,
                                   onSelected: (val) {
                                     setState(() {
                                       _selectedCompany = val;
@@ -596,13 +755,19 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
                           const SizedBox(height: 16),
                           _buildFieldBlock(
                             label: 'COMPLAINT CATEGORY',
+                            isRequired: true,
                             child: _buildDropdownTile(
-                              value: _selectedCategory,
+                              value: _selectedCategory?.name ?? 'Select Complaint Category',
+                              isLoading: _isLoadingCategories,
                               onTap: () {
-                                _showSelectionModal(
+                                _showSelectionModal<DropdownItem>(
                                   title: 'Select Complaint Category',
                                   options: _categories,
                                   currentValue: _selectedCategory,
+                                  getDisplay: (c) => c.name,
+                                  isLoading: _isLoadingCategories,
+                                  errorMessage: _categoryError,
+                                  onRetry: _fetchCategories,
                                   onSelected: (val) {
                                     setState(() {
                                       _selectedCategory = val;
@@ -623,21 +788,25 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
                           const SizedBox(height: 16),
                           _buildFieldBlock(
                             label: 'WORKING LOCATION',
+                            isRequired: true,
                             child: _buildDropdownTile(
-                              value: _selectedWorkingLocation,
+                              value: _selectedWorkingLocation?.name ?? 'Select Working Location',
+                              isLoading: _isLoadingLocations,
                               onTap: () {
-                                if (_workingLocations.isNotEmpty) {
-                                  _showSelectionModal(
-                                    title: 'Select Working Location',
-                                    options: _workingLocations,
-                                    currentValue: _selectedWorkingLocation,
-                                    onSelected: (val) {
-                                      setState(() {
-                                        _selectedWorkingLocation = val;
-                                      });
-                                    },
-                                  );
-                                }
+                                _showSelectionModal<WorkLocationItem>(
+                                  title: 'Select Working Location',
+                                  options: _workingLocations,
+                                  currentValue: _selectedWorkingLocation,
+                                  getDisplay: (l) => l.name,
+                                  isLoading: _isLoadingLocations,
+                                  errorMessage: _locationError,
+                                  onRetry: _fetchWorkingLocations,
+                                  onSelected: (val) {
+                                    setState(() {
+                                      _selectedWorkingLocation = val;
+                                    });
+                                  },
+                                );
                               },
                             ),
                           ),
@@ -966,14 +1135,15 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
   Widget _buildDropdownTile({
     required String value,
     required VoidCallback onTap,
+    bool isLoading = false,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: isLoading ? null : onTap,
       child: Container(
         height: 46,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isLoading ? const Color(0xFFF2ECE8) : Colors.white,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: const Color(0xFFE8DFE1),
@@ -983,22 +1153,32 @@ class _ComplaintFormScreenState extends State<ComplaintFormScreen> {
           children: [
             Expanded(
               child: Text(
-                value,
-                style: const TextStyle(
+                isLoading ? 'Loading options...' : value,
+                style: TextStyle(
                   fontFamily: 'Outfit',
                   fontSize: 14,
                   fontWeight: FontWeight.w400,
-                  color: Color(0xFF1A1310),
+                  color: isLoading ? const Color(0xFF888888) : const Color(0xFF1A1310),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: Color(0xFFC6134B),
-              size: 22,
-            ),
+            if (isLoading)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primary,
+                ),
+              )
+            else
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Color(0xFFC6134B),
+                size: 22,
+              ),
           ],
         ),
       ),

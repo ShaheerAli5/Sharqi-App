@@ -1,5 +1,7 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/services/attendance_repository.dart';
@@ -35,13 +37,89 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
       final items = await _attendanceRepository.getSelfServicePortalItems();
       if (mounted) {
         setState(() {
-          _portalItems = items;
+          _portalItems = List.from(items);
+          if (!_portalItems.any((e) => e.actionType == 'work_plan_convert')) {
+            _portalItems.add(
+              PortalServiceItem(
+                id: '6',
+                title: 'Work Plan XLSX Converter',
+                description:
+                    'Upload work-plan XLSX file for automatic system conversion and download',
+                hasSeeManual: false,
+                primaryButtonLabel: 'Select XLSX & Convert',
+                actionType: 'work_plan_convert',
+              ),
+            );
+          }
         });
       }
     } catch (_) {
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _onConvertWorkPlanXlsx() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xlsx', 'xls'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final filePath = result.files.single.path!;
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Uploading and converting Work Plan XLSX...'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+
+        final convertRes =
+            await _attendanceRepository.convertWorkPlanXlsx(filePath);
+
+        if (!mounted) return;
+
+        if (convertRes.containsKey('error') && convertRes['error'] != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(convertRes['error'].toString()),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+        } else {
+          final filename = convertRes['file'] ??
+              convertRes['filename'] ??
+              convertRes['url'] ??
+              '';
+          final downloadUrl = _attendanceRepository
+              .getWorkPlanDownloadUrl(filename.toString());
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Conversion complete! Opening download link...'),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          final Uri url = Uri.parse(downloadUrl);
+          if (await canLaunchUrl(url)) {
+            await launchUrl(url, mode: LaunchMode.externalApplication);
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Work plan selection error: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
       }
     }
   }
@@ -58,6 +136,8 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
         return Icons.lightbulb_outline_rounded;
       case 'salary_slip':
         return Icons.article_outlined;
+      case 'work_plan_convert':
+        return Icons.insert_drive_file_outlined;
       default:
         return Icons.grid_view_rounded;
     }
@@ -75,6 +155,8 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
         return Icons.lightbulb_outline_rounded;
       case 'salary_slip':
         return Icons.article_outlined;
+      case 'work_plan_convert':
+        return Icons.upload_file_rounded;
       default:
         return Icons.arrow_forward_rounded;
     }
@@ -93,6 +175,8 @@ class _SelfServicePortalScreenState extends State<SelfServicePortalScreen> {
         return () => Navigator.pushNamed(context, AppRoutes.brightIdeaForm);
       case 'salary_slip':
         return () => Navigator.pushNamed(context, AppRoutes.salarySlip);
+      case 'work_plan_convert':
+        return () => _onConvertWorkPlanXlsx();
       default:
         return () {};
     }

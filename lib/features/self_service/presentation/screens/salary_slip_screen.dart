@@ -6,6 +6,8 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/attendance_repository.dart';
 import '../../../../core/services/auth_repository.dart';
 import '../../../../core/services/storage_service.dart';
+import '../../../../data/models/company_models.dart';
+import '../../../../data/models/dropdown_item.dart';
 import '../widgets/request_success_dialog.dart';
 import '../widgets/self_service_otp_modal.dart';
 
@@ -20,49 +22,28 @@ class _SalarySlipScreenState extends State<SalarySlipScreen> {
   final _formKey = GlobalKey<FormState>();
 
   // Form Fields State
-  String _selectedCompany = '';
-  final TextEditingController _employeeNoController =
-      TextEditingController();
-  final TextEditingController _employeeNameController =
-      TextEditingController();
-  final TextEditingController _employeeEmailController =
-      TextEditingController();
-  final TextEditingController _employeePhoneController =
-      TextEditingController();
+  CompanyItem? _selectedCompany;
+  final TextEditingController _employeeNoController = TextEditingController();
+  final TextEditingController _employeeNameController = TextEditingController();
+  final TextEditingController _employeeEmailController = TextEditingController();
+  final TextEditingController _employeePhoneController = TextEditingController();
   final TextEditingController _qidController = TextEditingController();
   final TextEditingController _qidExpiryController = TextEditingController();
 
-  String _selectedMonth = 'January';
+  DropdownItem? _selectedMonth;
   bool _isDisclaimerAccepted = false;
 
-  List<String> _companies = [];
-  final List<String> _months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
+  List<CompanyItem> _companies = [];
+  bool _isLoadingCompanies = false;
+  String? _companyError;
+
+  List<DropdownItem> _months = [];
+  bool _isLoadingMonths = false;
+  String? _monthError;
 
   @override
   void initState() {
     super.initState();
-
-    final now = DateTime.now();
-    _selectedMonth = _months[now.month - 1];
-
-    final company = StorageService.getValue(StorageService.keyCompanyName);
-    if (company.isNotEmpty) {
-      _selectedCompany = company;
-      _companies = [company];
-    }
 
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
     if (empNo.isNotEmpty) {
@@ -93,22 +74,81 @@ class _SalarySlipScreenState extends State<SalarySlipScreen> {
   }
 
   Future<void> _fetchApiData() async {
+    _fetchCompanies();
+    _fetchMonths();
+    _fetchDashboardData();
+  }
+
+  Future<void> _fetchCompanies() async {
+    setState(() {
+      _isLoadingCompanies = true;
+      _companyError = null;
+    });
+
     try {
       final compList = await AuthRepository().getCompanyList();
-      final dashData = await AttendanceRepository().getDashboardData();
-
       if (mounted) {
         setState(() {
-          if (compList.isNotEmpty) {
-            _companies = compList.map((c) => c.name).toList();
-            final savedCompany =
-                StorageService.getValue(StorageService.keyCompanyName);
-            if (savedCompany.isNotEmpty && _companies.contains(savedCompany)) {
-              _selectedCompany = savedCompany;
-            } else if (_companies.isNotEmpty) {
-              _selectedCompany = _companies.first;
-            }
+          _companies = compList;
+          _isLoadingCompanies = false;
+          final savedCompanyIdStr = StorageService.getValue(StorageService.keyCompanyId);
+          final savedCompanyName = StorageService.getValue(StorageService.keyCompanyName);
+
+          if (_companies.isNotEmpty) {
+            final match = _companies.firstWhere(
+              (c) =>
+                  c.id.toString() == savedCompanyIdStr ||
+                  c.name.toLowerCase() == savedCompanyName.toLowerCase(),
+              orElse: () => _companies.first,
+            );
+            _selectedCompany = match;
+          } else {
+            _selectedCompany = null;
           }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingCompanies = false;
+          _companyError = 'Failed to load companies: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchMonths() async {
+    setState(() {
+      _isLoadingMonths = true;
+      _monthError = null;
+    });
+
+    try {
+      // Month options must come from backend API. Since no backend endpoint is documented
+      // for salary slip months in API reference, options list remains empty.
+      if (mounted) {
+        setState(() {
+          _months = [];
+          _selectedMonth = null;
+          _isLoadingMonths = false;
+          _monthError = 'Backend API required for salary slip months';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingMonths = false;
+          _monthError = 'Failed to load months: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchDashboardData() async {
+    try {
+      final dashData = await AttendanceRepository().getDashboardData();
+      if (mounted) {
+        setState(() {
           final qidVal = dashData.qidNumber.isNotEmpty
               ? dashData.qidNumber
               : StorageService.getValue(StorageService.keyQid);
@@ -178,11 +218,15 @@ class _SalarySlipScreenState extends State<SalarySlipScreen> {
     super.dispose();
   }
 
-  void _showSelectionModal({
+  void _showSelectionModal<T>({
     required String title,
-    required List<String> options,
-    required String currentValue,
-    required ValueChanged<String> onSelected,
+    required List<T> options,
+    required T? currentValue,
+    required String Function(T item) getDisplay,
+    required ValueChanged<T> onSelected,
+    bool isLoading = false,
+    String? errorMessage,
+    VoidCallback? onRetry,
   }) {
     showModalBottomSheet(
       context: context,
@@ -223,52 +267,102 @@ class _SalarySlipScreenState extends State<SalarySlipScreen> {
                 ),
                 const SizedBox(height: 12),
                 Flexible(
-                  child: options.isEmpty
+                  child: isLoading
                       ? const Center(
                           child: Padding(
-                            padding: EdgeInsets.all(20.0),
+                            padding: EdgeInsets.all(24.0),
                             child: CircularProgressIndicator(
                               color: AppColors.primary,
                             ),
                           ),
                         )
-                      : ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: options.length,
-                          separatorBuilder: (context, index) => const Divider(
-                            height: 1,
-                            color: AppColors.divider,
-                          ),
-                          itemBuilder: (context, index) {
-                            final option = options[index];
-                            final isSelected = option == currentValue;
-                            return ListTile(
-                              title: Text(
-                                option,
-                                style: TextStyle(
-                                  fontFamily: 'Outfit',
-                                  fontSize: 15,
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                  color: isSelected
-                                      ? AppColors.primary
-                                      : const Color(0xFF1A1310),
+                      : errorMessage != null
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      errorMessage,
+                                      style: const TextStyle(
+                                        fontFamily: 'Outfit',
+                                        fontSize: 14,
+                                        color: Color(0xFFC6134B),
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    if (onRetry != null) ...[
+                                      const SizedBox(height: 12),
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          onRetry();
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primary,
+                                        ),
+                                        child: const Text('Retry'),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
-                              trailing: isSelected
-                                  ? const Icon(
-                                      Icons.check_circle,
-                                      color: AppColors.primary,
-                                    )
-                                  : null,
-                              onTap: () {
-                                onSelected(option);
-                                Navigator.pop(context);
-                              },
-                            );
-                          },
-                        ),
+                            )
+                          : options.isEmpty
+                              ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(24.0),
+                                    child: Text(
+                                      'No options available',
+                                      style: TextStyle(
+                                        fontFamily: 'Outfit',
+                                        fontSize: 14,
+                                        color: Color(0xFF888888),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : ListView.separated(
+                                  shrinkWrap: true,
+                                  itemCount: options.length,
+                                  separatorBuilder: (context, index) =>
+                                      const Divider(
+                                    height: 1,
+                                    color: AppColors.divider,
+                                  ),
+                                  itemBuilder: (context, index) {
+                                    final option = options[index];
+                                    final displayText = getDisplay(option);
+                                    final isSelected = currentValue != null &&
+                                        option == currentValue;
+                                    return ListTile(
+                                      title: Text(
+                                        displayText,
+                                        style: TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 15,
+                                          fontWeight: isSelected
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                          color: isSelected
+                                              ? AppColors.primary
+                                              : const Color(0xFF1A1310),
+                                        ),
+                                      ),
+                                      trailing: isSelected
+                                          ? const Icon(
+                                              Icons.check_circle,
+                                              color: AppColors.primary,
+                                            )
+                                          : null,
+                                      onTap: () {
+                                        onSelected(option);
+                                        Navigator.pop(context);
+                                      },
+                                    );
+                                  },
+                                ),
                 ),
               ],
             ),
@@ -279,6 +373,20 @@ class _SalarySlipScreenState extends State<SalarySlipScreen> {
   }
 
   Future<void> _onConfirmDetails() async {
+    if (_selectedCompany == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select Company')),
+      );
+      return;
+    }
+
+    if (_selectedMonth == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select Month')),
+      );
+      return;
+    }
+
     if (!_isDisclaimerAccepted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -296,7 +404,7 @@ class _SalarySlipScreenState extends State<SalarySlipScreen> {
       return;
     }
 
-    final companyId = StorageService.getValue(StorageService.keyCompanyId);
+    final companyId = (_selectedCompany?.id ?? StorageService.getValue(StorageService.keyCompanyId)).toString();
     final phone = _employeePhoneController.text.trim().isNotEmpty
         ? _employeePhoneController.text.trim()
         : StorageService.getValue(StorageService.keyPhone);
@@ -311,14 +419,16 @@ class _SalarySlipScreenState extends State<SalarySlipScreen> {
       onVerifyAndSubmit: () async {
         try {
           final payload = {
-            'company': _selectedCompany,
+            'company': _selectedCompany?.name ?? '',
+            'company_id': _selectedCompany?.id ?? companyId,
             'employee_number': empNo,
             'employee_name': _employeeNameController.text.trim(),
             'employee_email': _employeeEmailController.text.trim(),
             'employee_phone': phone,
             'qid': _qidController.text.trim(),
             'qid_expiry': _qidExpiryController.text.trim(),
-            'month': _selectedMonth,
+            'month': _selectedMonth?.name ?? '',
+            'month_id': _selectedMonth?.id,
             'disclaimer_confirmed': _isDisclaimerAccepted,
             'otp_verified': true,
           };
@@ -400,15 +510,19 @@ class _SalarySlipScreenState extends State<SalarySlipScreen> {
                           const SizedBox(height: 16),
                           _buildFieldBlock(
                             label: 'COMPANY',
+                            isRequired: true,
                             child: _buildDropdownTile(
-                              value: _selectedCompany.isNotEmpty
-                                  ? _selectedCompany
-                                  : 'Select Company',
+                              value: _selectedCompany?.name ?? 'Select Company',
+                              isLoading: _isLoadingCompanies,
                               onTap: () {
-                                _showSelectionModal(
+                                _showSelectionModal<CompanyItem>(
                                   title: 'Select Company',
                                   options: _companies,
                                   currentValue: _selectedCompany,
+                                  getDisplay: (c) => c.name,
+                                  isLoading: _isLoadingCompanies,
+                                  errorMessage: _companyError,
+                                  onRetry: _fetchCompanies,
                                   onSelected: (val) {
                                     setState(() {
                                       _selectedCompany = val;
@@ -480,13 +594,19 @@ class _SalarySlipScreenState extends State<SalarySlipScreen> {
                           const SizedBox(height: 16),
                           _buildFieldBlock(
                             label: 'MONTH',
+                            isRequired: true,
                             child: _buildDropdownTile(
-                              value: _selectedMonth,
+                              value: _selectedMonth?.name ?? 'Select Month',
+                              isLoading: _isLoadingMonths,
                               onTap: () {
-                                _showSelectionModal(
+                                _showSelectionModal<DropdownItem>(
                                   title: 'Select Month',
                                   options: _months,
                                   currentValue: _selectedMonth,
+                                  getDisplay: (m) => m.name,
+                                  isLoading: _isLoadingMonths,
+                                  errorMessage: _monthError,
+                                  onRetry: _fetchMonths,
                                   onSelected: (val) {
                                     setState(() {
                                       _selectedMonth = val;
@@ -679,14 +799,15 @@ class _SalarySlipScreenState extends State<SalarySlipScreen> {
   Widget _buildDropdownTile({
     required String value,
     required VoidCallback onTap,
+    bool isLoading = false,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: isLoading ? null : onTap,
       child: Container(
         height: 46,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isLoading ? const Color(0xFFF2ECE8) : Colors.white,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: const Color(0xFFE8DFE1),
@@ -696,22 +817,32 @@ class _SalarySlipScreenState extends State<SalarySlipScreen> {
           children: [
             Expanded(
               child: Text(
-                value,
-                style: const TextStyle(
+                isLoading ? 'Loading options...' : value,
+                style: TextStyle(
                   fontFamily: 'Outfit',
                   fontSize: 14,
                   fontWeight: FontWeight.w400,
-                  color: Color(0xFF1A1310),
+                  color: isLoading ? const Color(0xFF888888) : const Color(0xFF1A1310),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              color: Color(0xFFC6134B),
-              size: 22,
-            ),
+            if (isLoading)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primary,
+                ),
+              )
+            else
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Color(0xFFC6134B),
+                size: 22,
+              ),
           ],
         ),
       ),
