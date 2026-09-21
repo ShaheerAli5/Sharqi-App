@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
@@ -189,12 +190,22 @@ class AppDrawer extends StatelessWidget {
                         width: double.infinity,
                         height: 48,
                         child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pushNamedAndRemoveUntil(
-                              context,
-                              AppRoutes.signIn,
-                              (route) => false,
-                            );
+                          onPressed: () async {
+                            // The ERP portal has its own cookie-backed session.
+                            // Clear it with the app session so the next employee
+                            // cannot inherit the previous employee's portal login.
+                            try {
+                              await WebViewCookieManager().clearCookies();
+                            } finally {
+                              await StorageService.clear();
+                            }
+                            if (context.mounted) {
+                              Navigator.pushNamedAndRemoveUntil(
+                                context,
+                                AppRoutes.signIn,
+                                (route) => false,
+                              );
+                            }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor:

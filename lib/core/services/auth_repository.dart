@@ -95,71 +95,24 @@ class AuthRepository {
 
         final verifyRes = VerifyOtpResponse.fromJson(map);
 
-        if (verifyRes.isSuccess || otp == '3285') {
-          // Persist all user session keys into StorageService
-          if (verifyRes.apiToken.isNotEmpty) {
-            await StorageService.addValue(
-                StorageService.keyAccessToken, verifyRes.apiToken);
-          }
-          if (verifyRes.name.isNotEmpty) {
-            await StorageService.addValue(
-                StorageService.keyFullName, verifyRes.name);
-          }
-          if (verifyRes.employeeId > 0) {
-            await StorageService.addInt(
-                StorageService.keyEmpId, verifyRes.employeeId);
-          }
-          if (verifyRes.empNo.isNotEmpty) {
-            await StorageService.addValue(
-                StorageService.keyEmpNo, verifyRes.empNo);
-          }
-          if (verifyRes.profileImageBase64.isNotEmpty) {
-            await StorageService.addValue(
-                StorageService.keyProfileImage, verifyRes.profileImageBase64);
-          }
-          if (verifyRes.company.isNotEmpty) {
-            await StorageService.addValue(
-                StorageService.keyCompanyName, verifyRes.company);
-          }
-          if (verifyRes.phone.isNotEmpty) {
-            await StorageService.addValue(
-                StorageService.keyPhone, verifyRes.phone);
-          }
-          if (verifyRes.whatsappPhone.isNotEmpty) {
-            await StorageService.addValue(
-                StorageService.keyWhatsAppPhone, verifyRes.whatsappPhone);
-          }
-          if (verifyRes.email.isNotEmpty) {
-            await StorageService.addValue(
-                StorageService.keyEmail, verifyRes.email);
-          }
-          if (verifyRes.qidNumber.isNotEmpty) {
-            await StorageService.addValue(
-                StorageService.keyQid, verifyRes.qidNumber);
-          }
-          if (verifyRes.qidExpiry.isNotEmpty) {
-            await StorageService.addValue(
-                StorageService.keyQidExpiry, verifyRes.qidExpiry);
-          }
-          if (companyId != null) {
-            await StorageService.addValue(
-                StorageService.keyCompanyId, companyId.toString());
-          }
+        if (verifyRes.isSuccess && verifyRes.apiToken.isNotEmpty) {
+          await _saveUserSession(verifyRes, companyId);
+          return verifyRes;
+        }
 
-          if (otp == '3285' && !verifyRes.isSuccess) {
-            return VerifyOtpResponse(
-              success: 'Login Successful',
-              employeeId: StorageService.getInt(StorageService.keyEmpId),
-              name: StorageService.getValue(StorageService.keyFullName),
-              empNo: StorageService.getValue(StorageService.keyEmpNo),
-              phone: StorageService.getValue(StorageService.keyPhone),
-              email: StorageService.getValue(StorageService.keyEmail),
-              company: StorageService.getValue(StorageService.keyCompanyName),
-              apiToken: StorageService.getValue(StorageService.keyAccessToken),
-              profileImageBase64: StorageService.getValue(StorageService.keyProfileImage),
-              whatsappPhone: StorageService.getValue(StorageService.keyWhatsAppPhone),
-            );
-          }
+        if (verifyRes.isSuccess && verifyRes.apiToken.isEmpty) {
+          return VerifyOtpResponse(
+            employeeId: 0,
+            name: '',
+            empNo: '',
+            phone: '',
+            email: '',
+            company: '',
+            apiToken: '',
+            profileImageBase64: '',
+            whatsappPhone: '',
+            error: 'Invalid login response. Please try again.',
+          );
         }
 
         return verifyRes;
@@ -175,10 +128,83 @@ class AuthRepository {
         apiToken: '',
         profileImageBase64: '',
         whatsappPhone: '',
-        error: 'Verification failed',
+        error: 'Verification timed out or failed. Please try again.',
       );
     } catch (e) {
-      rethrow;
+      return VerifyOtpResponse(
+        employeeId: 0,
+        name: '',
+        empNo: '',
+        phone: '',
+        email: '',
+        company: '',
+        apiToken: '',
+        profileImageBase64: '',
+        whatsappPhone: '',
+        error: 'Verification error: $e',
+      );
+    }
+  }
+
+  Future<void> _clearPreviousSession() async {
+    await StorageService.removeValue(StorageService.keyAccessToken);
+    await StorageService.removeValue(StorageService.keyFullName);
+    await StorageService.removeValue(StorageService.keyEmpId);
+    await StorageService.removeValue(StorageService.keyProfileImage);
+    await StorageService.removeValue(StorageService.keyPhone);
+    await StorageService.removeValue(StorageService.keyWhatsAppPhone);
+    await StorageService.removeValue(StorageService.keyEmail);
+    await StorageService.removeValue(StorageService.keyQid);
+    await StorageService.removeValue(StorageService.keyQidExpiry);
+  }
+
+  Future<void> _saveUserSession(
+      VerifyOtpResponse verifyRes, dynamic companyId) async {
+    await _clearPreviousSession();
+
+    if (verifyRes.apiToken.isNotEmpty) {
+      await StorageService.addValue(
+          StorageService.keyAccessToken, verifyRes.apiToken);
+    }
+    if (verifyRes.name.isNotEmpty) {
+      await StorageService.addValue(StorageService.keyFullName, verifyRes.name);
+    }
+    if (verifyRes.employeeId > 0) {
+      await StorageService.addInt(
+          StorageService.keyEmpId, verifyRes.employeeId);
+    }
+    if (verifyRes.empNo.isNotEmpty) {
+      await StorageService.addValue(StorageService.keyEmpNo, verifyRes.empNo);
+    }
+    if (verifyRes.profileImageBase64.isNotEmpty &&
+        verifyRes.profileImageBase64 != 'N/A') {
+      await StorageService.addValue(
+          StorageService.keyProfileImage, verifyRes.profileImageBase64);
+    }
+    if (verifyRes.company.isNotEmpty) {
+      await StorageService.addValue(
+          StorageService.keyCompanyName, verifyRes.company);
+    }
+    if (verifyRes.phone.isNotEmpty) {
+      await StorageService.addValue(StorageService.keyPhone, verifyRes.phone);
+    }
+    if (verifyRes.whatsappPhone.isNotEmpty) {
+      await StorageService.addValue(
+          StorageService.keyWhatsAppPhone, verifyRes.whatsappPhone);
+    }
+    if (verifyRes.email.isNotEmpty) {
+      await StorageService.addValue(StorageService.keyEmail, verifyRes.email);
+    }
+    if (verifyRes.qidNumber.isNotEmpty) {
+      await StorageService.addValue(StorageService.keyQid, verifyRes.qidNumber);
+    }
+    if (verifyRes.qidExpiry.isNotEmpty) {
+      await StorageService.addValue(
+          StorageService.keyQidExpiry, verifyRes.qidExpiry);
+    }
+    if (companyId != null) {
+      await StorageService.addValue(
+          StorageService.keyCompanyId, companyId.toString());
     }
   }
 }

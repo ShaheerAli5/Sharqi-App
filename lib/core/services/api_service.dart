@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'storage_service.dart';
 
 class ApiService {
   late final Dio _dio;
@@ -10,6 +11,8 @@ class ApiService {
         Dio(
           BaseOptions(
             baseUrl: baseUrl,
+            // Match the native OkHttp client. Some valid employees take more
+            // than a few seconds to complete OTP verification.
             connectTimeout: const Duration(seconds: 60),
             receiveTimeout: const Duration(seconds: 60),
             sendTimeout: const Duration(seconds: 60),
@@ -20,7 +23,14 @@ class ApiService {
           ),
         );
 
-    _dio.interceptors.add(LogInterceptor(responseBody: true, requestBody: true));
+    _dio.interceptors.add(
+      LogInterceptor(
+        requestBody: false,
+        requestHeader: false,
+        responseBody: false,
+        responseHeader: false,
+      ),
+    );
   }
 
   /// Helper method that automatically encapsulates payloads inside `{"params": params}`
@@ -44,8 +54,51 @@ class ApiService {
     }
   }
 
+  /// Helper method that tries a list of candidate endpoints until one returns a valid non-404 response
+  Future<Response> _postRpcWithFallback(
+      List<String> endpoints, dynamic params) async {
+    Response? lastResponse;
+
+    for (int i = 0; i < endpoints.length; i++) {
+      final endpoint = endpoints[i];
+      try {
+        final response = await _dio.post(
+          endpoint,
+          data: {'params': params},
+          options: Options(
+            validateStatus: (status) => status != null && status < 500,
+          ),
+        );
+
+        lastResponse = response;
+
+        if (response.statusCode == 200 && response.data != null) {
+          bool isOdoo404 = false;
+          if (response.data is Map<String, dynamic>) {
+            final dataMap = response.data as Map<String, dynamic>;
+            if (dataMap.containsKey('error') && dataMap['error'] != null) {
+              final errStr = dataMap['error'].toString().toLowerCase();
+              if (errStr.contains('404') ||
+                  errStr.contains('not found') ||
+                  errStr.contains('notfound') ||
+                  errStr.contains('werkzeug.exceptions.notfound')) {
+                isOdoo404 = true;
+              }
+            }
+          }
+
+          if (!isOdoo404) {
+            return response;
+          }
+        }
+      } catch (_) {}
+    }
+
+    return lastResponse ?? await _postRpc(endpoints.last, params);
+  }
+
   // ---------------------------------------------------------------------------
-  // Strongly-Typed 15 Confirmed Endpoints
+  // Strongly-Typed Endpoints
   // ---------------------------------------------------------------------------
 
   /// 1. Get Company List -> POST company/list with params: ""
@@ -163,36 +216,39 @@ class ApiService {
       'api_token': apiToken,
       'date': date,
       'time_in': timeIn,
-      'geo_location': '$lat,$long',
+      'geo_location': 'lat,long',
       'lat': lat,
       'long': long,
       'attendance_type': attendanceType,
     });
   }
 
-  /// 10. Record Time In (Secure/Geo) -> POST attendance/check/in/secure
-  Future<Response> recordTimeInSecure({
+  /// 11. Record Time Out -> POST attendance/check/out
+  Future<Response> recordTimeOut({
     required String employeeNumber,
     required dynamic companyId,
     required String apiToken,
-    required String timeIn,
-    required double lat,
-    required double long,
-    String attendanceType = 'present',
+    required String date,
+    required String timeOut,
+    double? lat,
+    double? long,
+    String note = '',
   }) {
-    return _postRpc('attendance/check/in/secure', {
+    final Map<String, dynamic> payload = {
       'employee_number': employeeNumber,
       'company_id': companyId,
       'api_token': apiToken,
-      'time_in': timeIn,
-      'geo_location': '$lat,$long',
-      'lat': lat,
-      'long': long,
-      'attendance_type': attendanceType,
-    });
+      'date': date,
+      'time_out': timeOut,
+      'note': note,
+    };
+    if (lat != null && lat != 0.0) payload['lat'] = lat;
+    if (long != null && long != 0.0) payload['long'] = long;
+
+    return _postRpc('attendance/check/out', payload);
   }
 
-  /// 11. Update Work Area -> POST attendance/update_area
+  /// 12. Update Today's Work Area -> POST attendance/update_area
   Future<Response> updateTodayWorkLocation({
     required dynamic timeInId,
     required dynamic areaId,
@@ -203,31 +259,7 @@ class ApiService {
     });
   }
 
-  /// 12. Record Time Out -> POST attendance/check/out
-  Future<Response> recordTimeOut({
-    required String employeeNumber,
-    required dynamic companyId,
-    required String apiToken,
-    required String date,
-    required String timeOut,
-    required double lat,
-    required double long,
-    String note = '',
-  }) {
-    return _postRpc('attendance/check/out', {
-      'employee_number': employeeNumber,
-      'company_id': companyId,
-      'api_token': apiToken,
-      'date': date,
-      'time_out': timeOut,
-      'geo_location': '$lat,$long',
-      'lat': lat,
-      'long': long,
-      'note': note,
-    });
-  }
-
-  /// 13. Get Monthly Attendance List -> POST attendance/list
+  /// 13. Get Attendance List -> POST attendance/list
   Future<Response> getAttendanceList({
     required String employeeNumber,
     required dynamic companyId,
@@ -254,28 +286,27 @@ class ApiService {
     String? startDate,
     String? endDate,
   }) {
-    final Map<String, dynamic> params = {
+    final Map<String, dynamic> payload = {
       'employee_number': employeeNumber,
       'company_id': companyId,
       'api_token': apiToken,
     };
-    if (monthNo != null && monthNo.isNotEmpty) params['month_no'] = monthNo;
-    if (year != null && year.isNotEmpty) params['year'] = year;
-    if (startDate != null && startDate.isNotEmpty) params['start_date'] = startDate;
-    if (endDate != null && endDate.isNotEmpty) params['end_date'] = endDate;
+    if (monthNo != null) payload['month_no'] = monthNo;
+    if (year != null) payload['year'] = year;
+    if (startDate != null) payload['start_date'] = startDate;
+    if (endDate != null) payload['end_date'] = endDate;
 
-    return _postRpc('employee/work_plan', params);
+    return _postRpc('employee/work_plan', payload);
   }
 
   /// 15. Get Notification Logs -> POST notification/logs
   Future<Response> getNotificationLogs({
     required String empNo,
-     required dynamic companyId,
+    required dynamic companyId,
     required String apiToken,
   }) {
     return _postRpc('notification/logs', {
       'emp_no': empNo,
-      'employee_number': empNo,
       'company_id': companyId,
       'api_token': apiToken,
     });
@@ -287,11 +318,97 @@ class ApiService {
     required dynamic companyId,
     required String apiToken,
   }) {
-    return _postRpc('self_service/portal', {
+    return _postRpcWithFallback([
+      'self_service/portal',
+      'self_service/list',
+      'self/service/portal',
+    ], {
       'employee_number': employeeNumber,
       'company_id': companyId,
       'api_token': apiToken,
     });
+  }
+
+  /// 16.1 Check Employee Attendance -> POST get/employee/attendance
+  Future<Response> checkEmployeeAttendance({
+    required String employeeNumber,
+    required dynamic companyId,
+    String attendanceType = 'present',
+  }) {
+    return _postRpcWithFallback([
+      'get/employee/attendance',
+      'employee/attendance',
+      'self_service/check_attendance',
+    ], {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'attendance_type': attendanceType,
+    });
+  }
+
+  /// 16.2 Register Employee Phone -> POST employee/registered/phone
+  Future<Response> registerEmployeePhone({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String workPhone,
+  }) {
+    return _postRpcWithFallback([
+      'employee/registered/phone',
+      'self_service/register_phone',
+    ], {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'work_phone': workPhone,
+    });
+  }
+
+  /// 16.3 Submit Attendance Form -> POST attendance/form/submit
+  Future<Response> submitAttendanceForm({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String otp,
+    required Map<String, dynamic> formData,
+  }) {
+    return _postRpcWithFallback([
+      'attendance/form/submit',
+      'self_service/form_submit',
+    ], {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'otp': otp,
+      ...formData,
+    });
+  }
+
+  /// 16.4 Convert Work Plan XLSX -> POST wp/convert
+  Future<Response> convertWorkPlanXlsx({
+    required String filePath,
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+  }) async {
+    final formData = FormData.fromMap({
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+      'file': await MultipartFile.fromFile(filePath),
+    });
+
+    return _dio.post(
+      'wp/convert',
+      data: formData,
+      options: Options(
+        headers: {
+          'api-token': apiToken,
+        },
+      ),
+    );
+  }
+
+  /// 16.5 Get Work Plan Download URL -> GET wp/download?file=
+  String getWorkPlanDownloadUrl(String filename) {
+    final token = StorageService.getValue(StorageService.keyAccessToken);
+    return '${baseUrl}wp/download?file=$filename&token=$token';
   }
 
   /// 17. Get Complaint Categories -> POST complaint/categories
@@ -300,11 +417,17 @@ class ApiService {
     required dynamic companyId,
     required String apiToken,
   }) {
-    return _postRpc('complaint/categories', {
+    final payload = {
       'employee_number': employeeNumber,
       'company_id': companyId,
       'api_token': apiToken,
-    });
+    };
+    return _postRpcWithFallback([
+      'complaint/categories',
+      'self_service/complaint/categories',
+      'self_service/categories',
+      'attendance/complaint/categories',
+    ], payload);
   }
 
   /// 18. Submit Complaint Request -> POST complaint/create
@@ -318,9 +441,19 @@ class ApiService {
       'employee_number': employeeNumber,
       'company_id': companyId,
       'api_token': apiToken,
+      'type': 'complaint',
+      'request_type': 'complaint',
       ...data,
     };
-    return _postRpc('complaint/create', payload);
+    return _postRpcWithFallback([
+      'attendance/form/submit',
+      'self_service/form/submit',
+      'complaint/create',
+      'self_service/complaint/create',
+      'selfservice/complaint/create',
+      'attendance/complaint/create',
+      'self_service/create',
+    ], payload);
   }
 
   /// 19. Get Employee Request Categories -> POST employee_request/categories
@@ -329,11 +462,17 @@ class ApiService {
     required dynamic companyId,
     required String apiToken,
   }) {
-    return _postRpc('employee_request/categories', {
+    final payload = {
       'employee_number': employeeNumber,
       'company_id': companyId,
       'api_token': apiToken,
-    });
+    };
+    return _postRpcWithFallback([
+      'employee_request/categories',
+      'self_service/employee_request/categories',
+      'self_service/categories',
+      'attendance/request/categories',
+    ], payload);
   }
 
   /// 20. Submit Employee Request -> POST employee_request/create
@@ -347,9 +486,17 @@ class ApiService {
       'employee_number': employeeNumber,
       'company_id': companyId,
       'api_token': apiToken,
+      'type': 'employee_request',
+      'request_type': 'employee_request',
       ...data,
     };
-    return _postRpc('employee_request/create', payload);
+    return _postRpcWithFallback([
+      'employee_request/create',
+      'self_service/employee_request/create',
+      'self_service/create',
+      'attendance/employee_request/create',
+      'self/service/employee_request/create',
+    ], payload);
   }
 
   /// 21. Get Leave Types -> POST leave/types
@@ -358,11 +505,17 @@ class ApiService {
     required dynamic companyId,
     required String apiToken,
   }) {
-    return _postRpc('leave/types', {
+    final payload = {
       'employee_number': employeeNumber,
       'company_id': companyId,
       'api_token': apiToken,
-    });
+    };
+    return _postRpcWithFallback([
+      'leave/types',
+      'self_service/leave/types',
+      'attendance/leave/types',
+      'leave/categories',
+    ], payload);
   }
 
   /// 22. Submit Leave Request -> POST leave/create
@@ -376,9 +529,17 @@ class ApiService {
       'employee_number': employeeNumber,
       'company_id': companyId,
       'api_token': apiToken,
+      'type': 'leave_request',
+      'request_type': 'leave',
       ...data,
     };
-    return _postRpc('leave/create', payload);
+    return _postRpcWithFallback([
+      'leave/create',
+      'self_service/leave/create',
+      'self_service/create',
+      'attendance/leave/create',
+      'self/service/leave/create',
+    ], payload);
   }
 
   /// 23. Submit Bright Idea -> POST bright_idea/create
@@ -392,9 +553,16 @@ class ApiService {
       'employee_number': employeeNumber,
       'company_id': companyId,
       'api_token': apiToken,
+      'type': 'bright_idea',
+      'request_type': 'bright_idea',
       ...data,
     };
-    return _postRpc('bright_idea/create', payload);
+    return _postRpcWithFallback([
+      'bright_idea/create',
+      'self_service/bright_idea/create',
+      'self_service/create',
+      'attendance/bright_idea/create',
+    ], payload);
   }
 
   /// 24. Submit Salary Slip Request -> POST salary_slip/create
@@ -408,75 +576,198 @@ class ApiService {
       'employee_number': employeeNumber,
       'company_id': companyId,
       'api_token': apiToken,
+      'type': 'salary_slip',
+      'request_type': 'salary_slip',
       ...data,
     };
-    return _postRpc('salary_slip/create', payload);
+    return _postRpcWithFallback([
+      'salary_slip/create',
+      'self_service/salary_slip/create',
+      'self_service/create',
+      'attendance/salary_slip/create',
+    ], payload);
   }
 
-  // ---------------------------------------------------------------------------
-  // Backward-Compatibility Helpers (Map Payload Overloads)
-  // ---------------------------------------------------------------------------
+  /// 25. Track Case -> POST self_service/track_case or complaint/track / leave/track
+  Future<Response> trackCase({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+    required String code,
+  }) {
+    final Map<String, dynamic> payload = {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+      'code': code,
+      'reference': code,
+      'incident_code': code,
+      'cms_code': code,
+      'leave_code': code,
+      'request_code': code,
+    };
 
-  dynamic _extractParams(dynamic data) {
-    if (data is Map && data.containsKey('params')) {
-      return data['params'];
+    final codeUpper = code.trim().toUpperCase();
+    final List<String> endpoints = [];
+
+    if (codeUpper.startsWith('CMS') || codeUpper.startsWith('INC')) {
+      endpoints.addAll([
+        'complaint/track',
+        'self_service/complaint/track',
+        'self_service/track_case',
+        'complaint/list',
+        'case/track',
+      ]);
+    } else if (codeUpper.startsWith('LV') || codeUpper.startsWith('LEAVE')) {
+      endpoints.addAll([
+        'leave/track',
+        'self_service/leave/track',
+        'self_service/track_case',
+        'leave/list',
+        'case/track',
+      ]);
+    } else if (codeUpper.startsWith('REQ') || codeUpper.startsWith('EMP')) {
+      endpoints.addAll([
+        'employee_request/track',
+        'self_service/employee_request/track',
+        'self_service/track_case',
+        'employee_request/list',
+        'case/track',
+      ]);
+    } else {
+      endpoints.addAll([
+        'self_service/track_case',
+        'complaint/track',
+        'employee_request/track',
+        'leave/track',
+        'case/track',
+        'self_service/cases',
+      ]);
     }
-    return data;
+
+    return _postRpcWithFallback(endpoints, payload);
   }
 
-  Future<Response> callGetCompanyList([dynamic map]) => getCompanyList();
+  Future<Response> trackCaseAlternative({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+    required String code,
+  }) {
+    final Map<String, dynamic> payload = {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+      'code': code,
+      'reference': code,
+      'incident_code': code,
+      'cms_code': code,
+      'leave_code': code,
+      'request_code': code,
+    };
 
-  Future<Response> sendOTP([dynamic map]) {
-    if (map is Map) {
-      final p = _extractParams(map);
-      if (p is Map) {
-        return sendOtp(
-          employeeNumber: (p['employee_number'] ?? '').toString(),
-          companyId: p['company_id'],
-        );
-      }
+    return _postRpcWithFallback([
+      'case/track',
+      'self_service/track_case',
+      'complaint/track',
+    ], payload);
+  }
+
+  /// 26. Get All Self Service Cases -> POST self_service/cases
+  Future<Response> getSelfServiceCases({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+    String? code,
+  }) {
+    final Map<String, dynamic> payload = {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+    };
+    if (code != null && code.trim().isNotEmpty) {
+      payload['code'] = code.trim();
+      payload['reference'] = code.trim();
+      payload['cms_code'] = code.trim();
     }
-    return _postRpc('attendance/sign/in', _extractParams(map));
+    return _postRpcWithFallback([
+      'self_service/cases',
+      'self_service/list',
+      'self_service/track_case',
+    ], payload);
   }
 
-  Future<Response> callVerifyOTP([dynamic map]) {
-    if (map is Map) {
-      final p = _extractParams(map);
-      if (p is Map) {
-        return verifyOtp(
-          employeeNumber: (p['employee_number'] ?? '').toString(),
-          companyId: p['company_id'],
-          otp: (p['otp'] ?? '').toString(),
-          deviceToken: (p['device_token'] ?? '').toString(),
-          deviceType: (p['device_type'] ?? 'android').toString(),
-          deviceInfo: p['device_info']?.toString(),
-        );
-      }
+  /// 27. Get Complaint List -> POST complaint/list
+  Future<Response> getComplaintList({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+    String? code,
+  }) {
+    final Map<String, dynamic> payload = {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+    };
+    if (code != null && code.trim().isNotEmpty) {
+      payload['code'] = code.trim();
+      payload['reference'] = code.trim();
+      payload['incident_code'] = code.trim();
+      payload['cms_code'] = code.trim();
     }
-    return _postRpc('attendance/otp/verify', _extractParams(map));
+    return _postRpcWithFallback([
+      'complaint/list',
+      'self_service/complaint/list',
+      'self_service/list',
+      'complaint/track',
+    ], payload);
   }
 
-  Future<Response> callGetDashBoardData([dynamic map]) {
-    if (map is Map) {
-      final p = _extractParams(map);
-      if (p is Map) {
-        return getDashboardData(
-          employeeNumber: (p['employee_number'] ?? p['emp_no'] ?? '').toString(),
-          companyId: p['company_id'],
-          apiToken: (p['api_token'] ?? '').toString(),
-        );
-      }
+  /// 28. Get Employee Request List -> POST employee_request/list
+  Future<Response> getEmployeeRequestList({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+    String? code,
+  }) {
+    final Map<String, dynamic> payload = {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+    };
+    if (code != null && code.trim().isNotEmpty) {
+      payload['code'] = code.trim();
+      payload['reference'] = code.trim();
+      payload['request_code'] = code.trim();
     }
-    return _postRpc('attendance/dashboard', _extractParams(map));
+    return _postRpcWithFallback([
+      'employee_request/list',
+      'self_service/employee_request/list',
+      'self_service/list',
+    ], payload);
   }
 
-  Future<Response> addCheckIN([dynamic map]) => _postRpc('attendance/check/in', _extractParams(map));
-
-  Future<Response> addCheckOUT([dynamic map]) => _postRpc('attendance/check/out', _extractParams(map));
-
-  Future<Response> getNotificationList([dynamic map]) => _postRpc('notification/logs', _extractParams(map));
-
-  Future<Response> employeeWorkPlan([dynamic map]) => _postRpc('employee/work_plan', _extractParams(map));
-
-  Future<Response> login(Map<String, dynamic> map) => _postRpc('login', _extractParams(map));
+  /// 29. Get Leave Request List -> POST leave/list
+  Future<Response> getLeaveList({
+    required String employeeNumber,
+    required dynamic companyId,
+    required String apiToken,
+    String? code,
+  }) {
+    final Map<String, dynamic> payload = {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+    };
+    if (code != null && code.trim().isNotEmpty) {
+      payload['code'] = code.trim();
+      payload['reference'] = code.trim();
+      payload['leave_code'] = code.trim();
+    }
+    return _postRpcWithFallback([
+      'leave/list',
+      'self_service/leave/list',
+      'self_service/list',
+    ], payload);
+  }
 }

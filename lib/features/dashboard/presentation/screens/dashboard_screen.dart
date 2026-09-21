@@ -18,6 +18,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final AttendanceRepository _attendanceRepository = AttendanceRepository();
 
   bool _isLoading = true;
+  String? _errorMessage;
   Map<String, dynamic> _dashboardData = {};
 
   @override
@@ -27,10 +28,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _fetchDashboard() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
       final dashData = await _attendanceRepository.getDashboardData();
-      if (mounted) {
+      if (!mounted) return;
+
+      if (dashData.error != null &&
+          dashData.error!.isNotEmpty &&
+          !dashData.success) {
+        setState(() {
+          _errorMessage = dashData.error;
+          _isLoading = false;
+        });
+      } else {
+        if (dashData.fullName.isNotEmpty) {
+          await StorageService.addValue(
+              StorageService.keyFullName, dashData.fullName);
+        }
+        if (dashData.phone.isNotEmpty) {
+          await StorageService.addValue(
+              StorageService.keyPhone, dashData.phone);
+        }
+        if (dashData.whatsapp.isNotEmpty) {
+          await StorageService.addValue(
+              StorageService.keyWhatsAppPhone, dashData.whatsapp);
+        }
+        if (dashData.profileImage.isNotEmpty &&
+            dashData.profileImage != 'N/A') {
+          await StorageService.addValue(
+              StorageService.keyProfileImage, dashData.profileImage);
+        }
+        if (dashData.company.isNotEmpty) {
+          await StorageService.addValue(
+              StorageService.keyCompanyName, dashData.company);
+        }
+
         setState(() {
           _dashboardData = {
             'company': dashData.company,
@@ -50,28 +86,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
             'whatsapp': dashData.whatsapp,
             'profile_image': dashData.profileImage,
           };
+          _isLoading = false;
         });
       }
-    } catch (_) {
-    } finally {
+    } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _errorMessage = 'Failed to load Dashboard data: $e';
+          _isLoading = false;
+        });
       }
     }
   }
 
+  String _formatFieldValue(dynamic val) {
+    if (val == null) return 'N/A';
+    final str = val.toString().trim();
+    if (str.isEmpty || str == 'null' || str == '—') return 'N/A';
+    return str;
+  }
+
   String _getNationalityWithFlag(String nationality) {
-    if (nationality.isEmpty || nationality == '—') return '—';
-    final norm = nationality.trim().toLowerCase();
-    if (norm.contains('india')) return '🇮🇳 $nationality';
-    if (norm.contains('qatar')) return '🇶🇦 $nationality';
-    if (norm.contains('pakistan')) return '🇵🇰 $nationality';
-    if (norm.contains('nepal')) return '🇳🇵 $nationality';
-    if (norm.contains('philippines') || norm.contains('filipino')) return '🇵🇭 $nationality';
-    if (norm.contains('bangladesh')) return '🇧🇩 $nationality';
-    if (norm.contains('egypt')) return '🇪🇬 $nationality';
-    if (norm.contains('sri lanka')) return '🇱🇰 $nationality';
-    return nationality;
+    final clean = _formatFieldValue(nationality);
+    if (clean == 'N/A') return 'N/A';
+    final norm = clean.toLowerCase();
+    if (norm.contains('india')) return '🇮🇳 $clean';
+    if (norm.contains('qatar')) return '🇶🇦 $clean';
+    if (norm.contains('pakistan')) return '🇵🇰 $clean';
+    if (norm.contains('nepal')) return '🇳🇵 $clean';
+    if (norm.contains('philippines') || norm.contains('filipino')) return '🇵🇭 $clean';
+    if (norm.contains('bangladesh')) return '🇧🇩 $clean';
+    if (norm.contains('egypt')) return '🇪🇬 $clean';
+    if (norm.contains('sri lanka')) return '🇱🇰 $clean';
+    return clean;
   }
 
   @override
@@ -84,40 +131,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
 
-    final fullName = _dashboardData['full_name']?.toString().isNotEmpty == true
-        ? _dashboardData['full_name'].toString()
-        : StorageService.getValue(StorageService.keyFullName);
+    final hasError = _errorMessage != null;
 
-    final empNo = _dashboardData['employee_number']?.toString().isNotEmpty == true
-        ? _dashboardData['employee_number'].toString()
+    final rawName = _formatFieldValue(_dashboardData['full_name']);
+    final fullName = (rawName != 'N/A')
+        ? rawName
+        : (!hasError ? StorageService.getValue(StorageService.keyFullName) : 'Employee');
+
+    final rawEmpNo = _formatFieldValue(_dashboardData['employee_number']);
+    final empNo = (rawEmpNo != 'N/A')
+        ? rawEmpNo
         : StorageService.getValue(StorageService.keyEmpNo);
 
-    final phone = _dashboardData['phone']?.toString().isNotEmpty == true
-        ? _dashboardData['phone'].toString()
-        : StorageService.getValue(StorageService.keyPhone);
+    final rawPhone = _formatFieldValue(_dashboardData['phone']);
+    final phone = (rawPhone != 'N/A')
+        ? rawPhone
+        : (!hasError ? StorageService.getValue(StorageService.keyPhone) : '');
 
-    final whatsapp = _dashboardData['whatsapp']?.toString().isNotEmpty == true
-        ? _dashboardData['whatsapp'].toString()
-        : StorageService.getValue(StorageService.keyWhatsAppData);
+    final rawWhatsapp = _formatFieldValue(_dashboardData['whatsapp']);
+    final whatsapp = (rawWhatsapp != 'N/A')
+        ? rawWhatsapp
+        : (!hasError ? StorageService.getValue(StorageService.keyWhatsAppPhone) : '');
 
-    final profileImg = _dashboardData['profile_image']?.toString().isNotEmpty == true
-        ? _dashboardData['profile_image'].toString()
-        : StorageService.getValue(StorageService.keyProfileImage);
+    final rawProfileImg = _formatFieldValue(_dashboardData['profile_image']);
+    final profileImg = (rawProfileImg != 'N/A')
+        ? rawProfileImg
+        : (!hasError ? StorageService.getValue(StorageService.keyProfileImage) : '');
 
-    final company = _dashboardData['company']?.toString().isNotEmpty == true
-        ? _dashboardData['company'].toString()
-        : StorageService.getValue(StorageService.keyCompanyName);
+    final rawCompany = _formatFieldValue(_dashboardData['company']);
+    final company = (rawCompany != 'N/A')
+        ? rawCompany
+        : (!hasError ? StorageService.getValue(StorageService.keyCompanyName) : '');
 
-    final joinDate = _dashboardData['join_date']?.toString() ?? '';
-    final qid = _dashboardData['qid_number']?.toString() ?? '';
-    final qidExpiry = _dashboardData['qid_expiry']?.toString() ?? '';
-    final passportNo = _dashboardData['passport_number']?.toString() ?? '';
-    final passportExp = _dashboardData['passport_expiry']?.toString() ?? '';
-    final gender = _dashboardData['gender']?.toString() ?? '';
-    final nationality = _dashboardData['nationality']?.toString() ?? '';
-    final workLocation = _dashboardData['work_location']?.toString() ?? '';
-    final location = _dashboardData['location']?.toString() ?? '';
-    final manager = _dashboardData['manager']?.toString() ?? '';
+    final joinDate = _formatFieldValue(_dashboardData['join_date']);
+    final qid = _formatFieldValue(_dashboardData['qid_number']);
+    final qidExpiry = _formatFieldValue(_dashboardData['qid_expiry']);
+    final passportNo = _formatFieldValue(_dashboardData['passport_number']);
+    final passportExp = _formatFieldValue(_dashboardData['passport_expiry']);
+    final gender = _formatFieldValue(_dashboardData['gender']);
+    final nationality = _formatFieldValue(_dashboardData['nationality']);
+    final workLocation = _formatFieldValue(_dashboardData['work_location']);
+    final location = _formatFieldValue(_dashboardData['location']);
+    final manager = _formatFieldValue(_dashboardData['manager']);
 
     final formattedNationality = _getNationalityWithFlag(nationality);
 
@@ -150,103 +205,139 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: _isLoading
                   ? const Center(
                       child: CircularProgressIndicator(color: AppColors.primary))
-                  : SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 4),
-
-                          // PERSONAL DETAILS CARD
-                          _buildDetailsCard(
-                            sectionTitle: 'PERSONAL DETAILS',
-                            rows: [
-                              _DetailRow(
-                                leftItem: _DetailItem(
-                                  icon: Icons.person_outline_rounded,
-                                  label: 'Gender',
-                                  value: gender.isNotEmpty ? gender : '—',
+                  : RefreshIndicator(
+                      onRefresh: _fetchDashboard,
+                      color: AppColors.primary,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          children: [
+                            if (_errorMessage != null) ...[
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFEBEE),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFFEF9A9A)),
                                 ),
-                                rightItem: _DetailItem(
-                                  icon: Icons.public_rounded,
-                                  label: 'Nationality',
-                                  value: formattedNationality,
-                                ),
-                              ),
-                              const _DividerLine(),
-                              _DetailRow(
-                                leftItem: _DetailItem(
-                                  icon: Icons.badge_outlined,
-                                  label: 'QID',
-                                  value: qid.isNotEmpty ? qid : '—',
-                                ),
-                                rightItem: _DetailItem(
-                                  icon: Icons.access_time_rounded,
-                                  label: 'QID Expiry',
-                                  value: qidExpiry.isNotEmpty ? qidExpiry : '—',
-                                ),
-                              ),
-                              const _DividerLine(),
-                              _DetailRow(
-                                leftItem: _DetailItem(
-                                  icon: Icons.assignment_ind_outlined,
-                                  label: 'Passport No.',
-                                  value: passportNo.isNotEmpty ? passportNo : '—',
-                                ),
-                                rightItem: _DetailItem(
-                                  icon: Icons.calendar_today_rounded,
-                                  label: 'Passport Exp.',
-                                  value: passportExp.isNotEmpty ? passportExp : '—',
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.error_outline_rounded,
+                                        color: Color(0xFFC62828)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _errorMessage!,
+                                        style: const TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 12,
+                                          color: Color(0xFFC62828),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
-                          ),
 
-                          const SizedBox(height: 16),
+                            const SizedBox(height: 4),
 
-                          // WORK DETAILS CARD
-                          _buildDetailsCard(
-                            sectionTitle: 'WORK DETAILS',
-                            rows: [
-                              _DetailRow(
-                                leftItem: _DetailItem(
-                                  icon: Icons.apartment_rounded,
-                                  label: 'Company',
-                                  value: company.isNotEmpty ? company : '—',
+                            // PERSONAL DETAILS CARD
+                            _buildDetailsCard(
+                              sectionTitle: 'PERSONAL DETAILS',
+                              rows: [
+                                _DetailRow(
+                                  leftItem: _DetailItem(
+                                    icon: Icons.person_outline_rounded,
+                                    label: 'Gender',
+                                    value: gender,
+                                  ),
+                                  rightItem: _DetailItem(
+                                    icon: Icons.public_rounded,
+                                    label: 'Nationality',
+                                    value: formattedNationality,
+                                  ),
                                 ),
-                                rightItem: _DetailItem(
-                                  icon: Icons.calendar_month_rounded,
-                                  label: 'Join Date',
-                                  value: joinDate.isNotEmpty ? joinDate : '—',
+                                const _DividerLine(),
+                                _DetailRow(
+                                  leftItem: _DetailItem(
+                                    icon: Icons.badge_outlined,
+                                    label: 'QID',
+                                    value: qid,
+                                  ),
+                                  rightItem: _DetailItem(
+                                    icon: Icons.access_time_rounded,
+                                    label: 'QID Expiry',
+                                    value: qidExpiry,
+                                  ),
                                 ),
-                              ),
-                              const _DividerLine(),
-                              _DetailRow(
-                                leftItem: _DetailItem(
-                                  icon: Icons.explore_outlined,
-                                  label: 'Location',
-                                  value: location.isNotEmpty ? location : '—',
+                                const _DividerLine(),
+                                _DetailRow(
+                                  leftItem: _DetailItem(
+                                    icon: Icons.assignment_ind_outlined,
+                                    label: 'Passport No.',
+                                    value: passportNo,
+                                  ),
+                                  rightItem: _DetailItem(
+                                    icon: Icons.calendar_today_rounded,
+                                    label: 'Passport Exp.',
+                                    value: passportExp,
+                                  ),
                                 ),
-                                rightItem: _DetailItem(
-                                  icon: Icons.location_on_outlined,
-                                  label: 'Work Location',
-                                  value: workLocation.isNotEmpty ? workLocation : '—',
-                                ),
-                              ),
-                              const _DividerLine(),
-                              _DetailRow(
-                                leftItem: _DetailItem(
-                                  icon: Icons.people_outline_rounded,
-                                  label: 'Manager',
-                                  value: manager.isNotEmpty ? manager : '—',
-                                ),
-                                rightItem: const SizedBox(),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
 
-                          const SizedBox(height: 24),
-                        ],
+                            const SizedBox(height: 16),
+
+                            // WORK DETAILS CARD
+                            _buildDetailsCard(
+                              sectionTitle: 'WORK DETAILS',
+                              rows: [
+                                _DetailRow(
+                                  leftItem: _DetailItem(
+                                    icon: Icons.apartment_rounded,
+                                    label: 'Company',
+                                    value: company,
+                                  ),
+                                  rightItem: _DetailItem(
+                                    icon: Icons.calendar_month_rounded,
+                                    label: 'Join Date',
+                                    value: joinDate,
+                                  ),
+                                ),
+                                const _DividerLine(),
+                                _DetailRow(
+                                  leftItem: _DetailItem(
+                                    icon: Icons.explore_outlined,
+                                    label: 'Location',
+                                    value: location,
+                                  ),
+                                  rightItem: _DetailItem(
+                                    icon: Icons.location_on_outlined,
+                                    label: 'Work Location',
+                                    value: workLocation,
+                                  ),
+                                ),
+                                const _DividerLine(),
+                                _DetailRow(
+                                  leftItem: _DetailItem(
+                                    icon: Icons.people_outline_rounded,
+                                    label: 'Manager',
+                                    value: manager,
+                                  ),
+                                  rightItem: const SizedBox(),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 24),
+                          ],
+                        ),
                       ),
                     ),
             ),
@@ -270,7 +361,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section Pill Header (Figma: Height 34px, Radius 999px, Color #7A0E33, Padding 12px x 8px)
           Container(
             height: 34,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -328,7 +418,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         bottom: false,
         child: Column(
           children: [
-            // Top Navigation Bar
             Container(
               height: 56,
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -378,13 +467,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
 
-            // Integrated Profile Section inside Burgundy Header
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Profile Avatar (Figma: 86px x 86px)
                   Container(
                     width: 86,
                     height: 86,
@@ -402,7 +489,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(width: 14),
 
-                  // Profile Details Column (Figma: Height 86px, Gap 8px)
                   Expanded(
                     child: SizedBox(
                       height: 86,
@@ -410,7 +496,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // Name (Figma: Outfit, 400 Regular, 16px, Height 20.8px / 1.3, White)
                           Text(
                             fullName.isNotEmpty ? fullName : 'Employee',
                             style: const TextStyle(
@@ -424,7 +509,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
 
-                          // EMP# Pill (Figma: Height 18px, Radius 999px, Padding 8px x 2px, Color white 25%)
                           if (empNo.isNotEmpty)
                             Container(
                               height: 18,
@@ -454,7 +538,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                             ),
 
-                          // Contact Chips Row (Figma: Height 33px, Gap 8px)
                           Row(
                             children: [
                               if (phone.isNotEmpty)
@@ -479,7 +562,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildProfileImage(String profileImg) {
-    if (profileImg.isEmpty) {
+    if (profileImg.isEmpty || profileImg == 'N/A') {
       return const Icon(
         Icons.person_outline_rounded,
         size: 40,
@@ -526,7 +609,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-// Phone Chip (Figma: Height 33px, Radius 999px, Color #C6134B, Padding 8px, Gap 6px)
 class _PhoneChip extends StatelessWidget {
   final String text;
 
@@ -544,7 +626,6 @@ class _PhoneChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Phone Dot Circle (Figma: 17px x 17px, Radius 8.5px, Color white 35%)
           Container(
             width: 17,
             height: 17,
@@ -561,7 +642,6 @@ class _PhoneChip extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          // Phone Text (Figma: Outfit, 500 Medium, 10px, White)
           Text(
             text,
             style: const TextStyle(
@@ -578,7 +658,6 @@ class _PhoneChip extends StatelessWidget {
   }
 }
 
-// WhatsApp Chip (Figma: Height 33px, Radius 999px, Color #319B4C, Padding 8px, Gap 6px)
 class _WhatsAppChip extends StatelessWidget {
   final String text;
 
@@ -596,7 +675,6 @@ class _WhatsAppChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // WhatsApp Dot Circle (Figma: 17px x 17px, Radius 8.5px, Color #25D366)
           Container(
             width: 17,
             height: 17,
@@ -613,7 +691,6 @@ class _WhatsAppChip extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          // WhatsApp Text (Figma: Outfit, 500 Medium, 10px, White)
           Text(
             text,
             style: const TextStyle(

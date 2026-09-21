@@ -5,7 +5,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/attendance_repository.dart';
 import '../../../../core/services/location_service.dart';
 import '../../../../core/services/storage_service.dart';
-import '../../../../routes/app_routes.dart';
+import '../../../../data/models/app_models.dart';
 import '../../../dashboard/presentation/widgets/app_drawer.dart';
 
 class RecordTimeOutScreen extends StatefulWidget {
@@ -18,10 +18,16 @@ class RecordTimeOutScreen extends StatefulWidget {
 class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final AttendanceRepository _attendanceRepository = AttendanceRepository();
+
   bool _isSubmitting = false;
   bool _isNotCheckedIn = false;
+  bool _isAlreadyTimeOut = false;
   DateTime? _lastTimeInDatetime;
+  String? _checkOutTimeDisplay;
   String _totalWorkHoursText = 'Loading...';
+
+  bool _isDetectingLocation = false;
+  String? _detectedLocationName;
 
   late Timer _timer;
   late DateTime _now;
@@ -46,11 +52,17 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
       if (!status.isTimeIn) {
         _isNotCheckedIn = true;
         if (mounted) {
-          _showNotCheckedInDialog();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No previous TIME IN was recorded today. Please check in first.'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
         }
         setState(() {
           _totalWorkHoursText = '0 Hours 0 Minutes';
         });
+        await _detectCurrentLocation();
         return;
       }
 
@@ -76,47 +88,113 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
           });
         }
       }
+
+      await _detectCurrentLocation();
     } catch (_) {
       if (mounted) {
         setState(() {
           _totalWorkHoursText = '0 Hours 0 Minutes';
         });
       }
+      await _detectCurrentLocation();
     }
   }
 
-  void _showNotCheckedInDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Check-In Required',
-          style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'You have not done Check-In yet today.',
-          style: TextStyle(fontFamily: 'Outfit'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              if (Navigator.canPop(context)) {
-                Navigator.pop(context); // Exit screen
-              } else {
-                Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-              }
-            },
-            child: const Text(
-              'OK',
-              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+  Future<void> _detectCurrentLocation() async {
+    if (!mounted) return;
+    setState(() => _isDetectingLocation = true);
+    try {
+      final locResult = await LocationService.getCurrentLocation();
+      if (!mounted) return;
+      if (locResult.isSuccess) {
+        if (locResult.address != null && locResult.address!.trim().isNotEmpty) {
+          setState(() {
+            _detectedLocationName = locResult.address;
+          });
+        } else {
+          setState(() {
+            _detectedLocationName =
+                '${locResult.latitude.toStringAsFixed(6)}, ${locResult.longitude.toStringAsFixed(6)}';
+          });
+        }
+      } else {
+        if (!_isNotCheckedIn && locResult.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(locResult.errorMessage!),
+              backgroundColor: Colors.red.shade700,
             ),
-          ),
-        ],
-      ),
-    );
+          );
+        }
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) {
+        setState(() => _isDetectingLocation = false);
+      }
+    }
+  }
+
+  String _formatCheckInTime(String? rawTime, DateTime fallbackDateTime) {
+    if (rawTime != null && rawTime.trim().isNotEmpty) {
+      final trimmed = rawTime.trim();
+
+      if (trimmed.toUpperCase().contains('AM') || trimmed.toUpperCase().contains('PM')) {
+        return trimmed;
+      }
+
+      final parsed = DateTime.tryParse(trimmed);
+      if (parsed != null) {
+        return _format12HourTime(parsed);
+      }
+
+      final spaceSplit = trimmed.split(' ');
+      final timeStr = spaceSplit.length > 1 ? spaceSplit.last : spaceSplit.first;
+      final timeParts = timeStr.split(':');
+      if (timeParts.length >= 2) {
+        final hour = int.tryParse(timeParts[0]);
+        final minute = int.tryParse(timeParts[1]);
+        if (hour != null && minute != null) {
+          final dt = DateTime(
+            fallbackDateTime.year,
+            fallbackDateTime.month,
+            fallbackDateTime.day,
+            hour,
+            minute,
+          );
+          return _format12HourTime(dt);
+        }
+      }
+    }
+    return _format12HourTime(fallbackDateTime);
+  }
+
+  String _format12HourTime(DateTime dt) {
+    final hourOfPeriod = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final hour = hourOfPeriod.toString().padLeft(2, '0');
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
+
+  String _formatTotalHours(dynamic val) {
+    if (val is num) {
+      final double hoursNum = val.toDouble();
+      final int h = hoursNum.floor();
+      final int m = ((hoursNum - h) * 60).round();
+      if (m == 0) return '$h Hours';
+      return '$h Hours $m Minutes';
+    } else if (val is String && val.trim().isNotEmpty) {
+      final parsed = double.tryParse(val.trim());
+      if (parsed != null) {
+        final int h = parsed.floor();
+        final int m = ((parsed - h) * 60).round();
+        if (m == 0) return '$h Hours';
+        return '$h Hours $m Minutes';
+      }
+      return val.trim();
+    }
+    return '0 Hours 0 Minutes';
   }
 
   @override
@@ -126,26 +204,51 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
   }
 
   Future<void> _onTimeOut() async {
+    if (_isAlreadyTimeOut) {
+      final timeStr = _checkOutTimeDisplay ?? _formatCheckInTime(null, _now);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('You are already checked out at $timeStr.'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+      return;
+    }
+
     if (_isNotCheckedIn) {
-      _showNotCheckedInDialog();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No previous TIME IN was recorded. Please check in first.'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
       return;
     }
 
     setState(() => _isSubmitting = true);
 
-    // 1. Acquire high-accuracy GPS coordinates
+    // 1. Acquire accurate GPS coordinates at time of check-out
     final locationResult = await LocationService.getCurrentLocation();
     if (!locationResult.isSuccess) {
       setState(() => _isSubmitting = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(locationResult.errorMessage ?? 'GPS acquisition failed'),
+            content: Text(locationResult.errorMessage ??
+                'Unable to detect your current location. Please enable GPS and try again.'),
             backgroundColor: Colors.red.shade700,
           ),
         );
       }
       return;
+    }
+
+    if (locationResult.address != null &&
+        locationResult.address!.trim().isNotEmpty) {
+      _detectedLocationName = locationResult.address;
+    } else {
+      _detectedLocationName =
+          '${locationResult.latitude.toStringAsFixed(6)}, ${locationResult.longitude.toStringAsFixed(6)}';
     }
 
     // 2. Evaluate 2-Hour Early Checkout Rule
@@ -154,7 +257,7 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
         ? DateTime.now().difference(_lastTimeInDatetime!)
         : Duration.zero;
 
-    if (timeElapsed.inMinutes <= 120) {
+    if (timeElapsed.inMinutes <= 120 && _lastTimeInDatetime != null) {
       if (!mounted) return;
       final String? enteredReason = await _showEarlyCheckoutDialog();
       if (enteredReason == null || enteredReason.trim().isEmpty) {
@@ -174,9 +277,9 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
           'Confirm Check-Out',
           style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold),
         ),
-        content: const Text(
-          'Are you sure you want to record time out?',
-          style: TextStyle(fontFamily: 'Outfit'),
+        content: Text(
+          'Are you sure you want to record time out at ${_detectedLocationName ?? "current location"}?',
+          style: const TextStyle(fontFamily: 'Outfit'),
         ),
         actions: [
           TextButton(
@@ -198,7 +301,7 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
       return;
     }
 
-    // 4. Dispatch Record Time Out API Call
+    // 4. Dispatch Record Time Out API Call (POST /alsharqi/attendance/check/out)
     try {
       final dateStr =
           "${_now.year}-${_now.month.toString().padLeft(2, '0')}-${_now.day.toString().padLeft(2, '0')}";
@@ -217,27 +320,38 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
 
       // Check if backend returned an error
       if (res['error'] != null && res['error'].toString().isNotEmpty) {
+        final errText = res['error'].toString();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(res['error'].toString()),
+            content: Text(errText),
             backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 4),
           ),
         );
         return;
       }
 
+      final serverTimeOut = res['time_out']?.toString();
+      final checkOutTimeFormatted =
+          _formatCheckInTime(serverTimeOut ?? timeOutStr, _now);
+
+      if (res['total_hours'] != null) {
+        _totalWorkHoursText = _formatTotalHours(res['total_hours']);
+      }
+
       if (mounted) {
+        setState(() {
+          _isAlreadyTimeOut = true;
+          _isNotCheckedIn = true;
+          _checkOutTimeDisplay = checkOutTimeFormatted;
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Time Out recorded successfully!'),
+          SnackBar(
+            content: Text('You are checked out at $checkOutTimeFormatted.'),
             backgroundColor: AppColors.primary,
           ),
         );
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        } else {
-          Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -368,6 +482,14 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
         statusBarBrightness: Brightness.dark,
       ),
     );
+
+    String locationName = 'Current Location';
+    if (_isDetectingLocation) {
+      locationName = 'Detecting current location...';
+    } else if (_detectedLocationName != null &&
+        _detectedLocationName!.trim().isNotEmpty) {
+      locationName = _detectedLocationName!;
+    }
 
     return Scaffold(
       key: _scaffoldKey,
@@ -505,6 +627,58 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
+                    if (_isAlreadyTimeOut && _checkOutTimeDisplay != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFFA5D6A7),
+                            width: 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.check_circle_rounded,
+                              color: Color(0xFF2E7D32),
+                              size: 24,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Status: Checked Out',
+                                    style: TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF2E7D32),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'You are checked out at $_checkOutTimeDisplay.',
+                                    style: const TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF1B5E20),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16.0),
@@ -542,6 +716,42 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                             child: Row(
                               children: [
                                 const Icon(
+                                  Icons.location_on_outlined,
+                                  color: Color(0xFFC6134B),
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    locationName,
+                                    style: const TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF1A1310),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Container(
+                            height: 44,
+                            width: double.infinity,
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFBF6F3),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFFE8DFE1),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
                                   Icons.calendar_month_outlined,
                                   color: Color(0xFF1A1310),
                                   size: 20,
@@ -559,7 +769,7 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 14),
                           Container(
                             height: 44,
                             width: double.infinity,
@@ -582,7 +792,9 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                                 ),
                                 const SizedBox(width: 12),
                                 Text(
-                                  _formatTime(_now),
+                                  (_isAlreadyTimeOut && _checkOutTimeDisplay != null)
+                                      ? _checkOutTimeDisplay!
+                                      : _formatTime(_now),
                                   style: const TextStyle(
                                     fontFamily: 'Outfit',
                                     fontSize: 15,
@@ -649,7 +861,7 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                           width: double.infinity,
                           height: 48,
                           child: ElevatedButton(
-                            onPressed: (_isSubmitting || _isNotCheckedIn)
+                            onPressed: (_isSubmitting || _isNotCheckedIn || _isAlreadyTimeOut)
                                 ? null
                                 : _onTimeOut,
                             style: ElevatedButton.styleFrom(
@@ -675,13 +887,13 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                                   )
                                 : Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: const [
+                                    children: [
                                       Text(
-                                        'Time Out',
+                                        _isAlreadyTimeOut ? 'Checked Out' : 'Time Out',
                                         textAlign: TextAlign.center,
                                         maxLines: 1,
                                         softWrap: false,
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                           fontFamily: 'Outfit',
                                           color: Colors.white,
                                           fontSize: 16,
@@ -690,9 +902,11 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                                           height: 1.0,
                                         ),
                                       ),
-                                      SizedBox(width: 8),
+                                      const SizedBox(width: 8),
                                       Icon(
-                                        Icons.arrow_back_rounded,
+                                        _isAlreadyTimeOut
+                                            ? Icons.check_circle_outline_rounded
+                                            : Icons.arrow_back_rounded,
                                         color: Colors.white,
                                         size: 16,
                                       ),

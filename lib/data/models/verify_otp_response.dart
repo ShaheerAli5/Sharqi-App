@@ -44,9 +44,12 @@ class VerifyOtpResponse {
       return val.toString();
     }
 
+    final errStr = result['error']?.toString();
+    final succStr = result['success']?.toString();
+
     return VerifyOtpResponse(
-      success: result['success']?.toString(),
-      error: result['error']?.toString(),
+      success: succStr,
+      error: errStr,
       employeeId: parseEmpId(result['employee_id']),
       name: parseStringSafe(result['name']),
       empNo: parseStringSafe(result['emp_no']),
@@ -61,7 +64,10 @@ class VerifyOtpResponse {
     );
   }
 
-  bool get isSuccess => (success != null && success!.isNotEmpty) || apiToken.isNotEmpty;
+  bool get isSuccess {
+    if (error != null && error!.isNotEmpty) return false;
+    return (success != null && success!.isNotEmpty) || apiToken.isNotEmpty;
+  }
 
   dynamic operator [](String key) {
     switch (key) {

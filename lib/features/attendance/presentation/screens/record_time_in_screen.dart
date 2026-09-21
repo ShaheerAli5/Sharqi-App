@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/attendance_repository.dart';
 import '../../../../core/services/location_service.dart';
@@ -22,10 +23,15 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
 
   List<WorkLocationItem> _locations = [];
   dynamic _selectedLocation;
-  TodayWorkLocation? _todayWorkLocation;
   bool _isLoadingLocations = false;
   bool _isSubmitting = false;
   bool _isAlreadyTimeIn = false;
+  bool _isValidationComplete = false;
+  int? _todayWorkAreaId;
+  String? _loadError;
+  String? _checkInTimeDisplay;
+
+  String? _detectedLocationName;
 
   late Timer _timer;
   late DateTime _now;
@@ -45,35 +51,57 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
   }
 
   Future<void> _checkStatusAndFetchLocations() async {
-    setState(() => _isLoadingLocations = true);
+    setState(() {
+      _isLoadingLocations = true;
+      _loadError = null;
+      _isValidationComplete = false;
+      _todayWorkAreaId = null;
+    });
     try {
-      final results = await Future.wait([
-        _attendanceRepository.getTodaysTimeInOut(),
-        _attendanceRepository.getWorkLocationList(),
-        _attendanceRepository.getTodayWorkLocation(),
-      ]);
-
-      final status = results[0] as TimeInOutStatus;
-      final locList = results[1] as List<WorkLocationItem>;
-      final todayLoc = results[2] as TodayWorkLocation;
+      if (kDebugMode) {
+        debugPrint(
+            '[RecordTimeIn] Current employee: ${StorageService.getValue(StorageService.keyEmpNo)}');
+        debugPrint(
+            '[RecordTimeIn] Company ID: ${StorageService.getValue(StorageService.keyCompanyId)}');
+      }
+      final status = await _attendanceRepository.getTodaysTimeInOut();
+      if (kDebugMode) {
+        debugPrint(
+            '[RecordTimeIn] Attendance status: is_time_in=${status.isTimeIn}');
+        debugPrint("[RecordTimeIn] Fetching today's work plan...");
+      }
+      final todayLoc = await _attendanceRepository.getTodayWorkLocation();
+      if (kDebugMode) debugPrint('[RecordTimeIn] Plan found: true');
 
       if (status.isTimeIn) {
         _isAlreadyTimeIn = true;
+        _checkInTimeDisplay =
+            _formatCheckInTime(status.lastTimeInDatetime, _now);
         if (mounted) {
-          _showAlreadyCheckedInDialog();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text('You are already checked in at $_checkInTimeDisplay.'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
         }
       }
 
-      _locations = locList;
-      _todayWorkLocation = todayLoc;
-      if (todayLoc.id > 0) {
-        _selectedLocation = todayLoc;
-      }
-
-      if (_selectedLocation == null && _locations.isNotEmpty) {
-        _selectedLocation = _locations.first;
-      }
-    } catch (_) {
+      _selectedLocation = todayLoc;
+      _detectedLocationName = todayLoc.name;
+      _isValidationComplete = true;
+      _todayWorkAreaId = todayLoc.id;
+    } on NoPlanForTodayException {
+      if (kDebugMode) debugPrint('[RecordTimeIn] Plan found: false');
+      _selectedLocation = null;
+      _detectedLocationName = null;
+      _isValidationComplete = true;
+      _todayWorkAreaId = null;
+      if (mounted) await _showMessage('No plan found for today');
+    } on AttendanceRequestException catch (error) {
+      _loadError = error.message;
+      if (mounted) await _handleAttendanceError(error);
     } finally {
       if (mounted) {
         setState(() => _isLoadingLocations = false);
@@ -81,38 +109,48 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
     }
   }
 
-  void _showAlreadyCheckedInDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Already Checked In',
-          style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'You have already recorded Time-In for today.',
-          style: TextStyle(fontFamily: 'Outfit'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              if (Navigator.canPop(context)) {
-                Navigator.pop(context); // Exit screen
-              } else {
-                Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-              }
-            },
-            child: const Text(
-              'OK',
-              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
+  String _formatCheckInTime(String? rawTime, DateTime fallbackDateTime) {
+    if (rawTime != null && rawTime.trim().isNotEmpty) {
+      final trimmed = rawTime.trim();
+
+      if (trimmed.toUpperCase().contains('AM') ||
+          trimmed.toUpperCase().contains('PM')) {
+        return trimmed;
+      }
+
+      final parsed = DateTime.tryParse(trimmed);
+      if (parsed != null) {
+        return _format12HourTime(parsed);
+      }
+
+      final spaceSplit = trimmed.split(' ');
+      final timeStr =
+          spaceSplit.length > 1 ? spaceSplit.last : spaceSplit.first;
+      final timeParts = timeStr.split(':');
+      if (timeParts.length >= 2) {
+        final hour = int.tryParse(timeParts[0]);
+        final minute = int.tryParse(timeParts[1]);
+        if (hour != null && minute != null) {
+          final dt = DateTime(
+            fallbackDateTime.year,
+            fallbackDateTime.month,
+            fallbackDateTime.day,
+            hour,
+            minute,
+          );
+          return _format12HourTime(dt);
+        }
+      }
+    }
+    return _format12HourTime(fallbackDateTime);
+  }
+
+  String _format12HourTime(DateTime dt) {
+    final hourOfPeriod = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final hour = hourOfPeriod.toString().padLeft(2, '0');
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
   }
 
   @override
@@ -121,8 +159,23 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
     super.dispose();
   }
 
-  void _showLocationModal() {
-    showModalBottomSheet(
+  Future<void> _showLocationModal() async {
+    if (_isLoadingLocations || !_isValidationComplete || _isAlreadyTimeIn) {
+      return;
+    }
+    if (_locations.isEmpty) {
+      setState(() => _isLoadingLocations = true);
+      try {
+        _locations = await _attendanceRepository.getWorkLocationList();
+      } on AttendanceRequestException catch (error) {
+        if (mounted) await _handleAttendanceError(error);
+        return;
+      } finally {
+        if (mounted) setState(() => _isLoadingLocations = false);
+      }
+    }
+    if (!mounted) return;
+    await showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFFFBF6F3),
       shape: const RoundedRectangleBorder(
@@ -163,7 +216,8 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                 Flexible(
                   child: _isLoadingLocations
                       ? const Center(
-                          child: CircularProgressIndicator(color: AppColors.primary))
+                          child: CircularProgressIndicator(
+                              color: AppColors.primary))
                       : ListView.separated(
                           shrinkWrap: true,
                           itemCount: _locations.length,
@@ -202,6 +256,7 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                               onTap: () {
                                 setState(() {
                                   _selectedLocation = loc;
+                                  _detectedLocationName = loc.name;
                                 });
                                 Navigator.pop(context);
                               },
@@ -219,131 +274,101 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
 
   Future<void> _onTimeIn() async {
     if (_isAlreadyTimeIn) {
-      _showAlreadyCheckedInDialog();
-      return;
-    }
-
-    if (_selectedLocation == null) {
+      final timeStr = _checkInTimeDisplay ?? _formatCheckInTime(null, _now);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a work location')),
+        SnackBar(
+          content: Text('You are already checked in at $timeStr.'),
+          backgroundColor: AppColors.primary,
+        ),
       );
       return;
     }
 
-    // 1. Acquire high-accuracy GPS coordinates
     setState(() => _isSubmitting = true);
-    final locationResult = await LocationService.getCurrentLocation();
-    if (!locationResult.isSuccess) {
-      setState(() => _isSubmitting = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(locationResult.errorMessage ?? 'GPS acquisition failed'),
-            backgroundColor: Colors.red.shade700,
-          ),
+    try {
+      final locationResult = await LocationService.getCurrentLocation();
+      if (!locationResult.isSuccess) {
+        throw AttendanceRequestException(
+          locationResult.errorMessage ??
+              'Unable to detect your current location. Please enable GPS and try again.',
         );
       }
-      return;
-    }
-
-    // 2. Prompt confirmation dialog
-    if (!mounted) return;
-    final bool? confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Confirm Check-In',
-          style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'Are you sure you want to record time in?',
-          style: TextStyle(fontFamily: 'Outfit'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirm',
-                style: TextStyle(
-                    color: AppColors.primary, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) {
-      setState(() => _isSubmitting = false);
-      return;
-    }
-
-    // 3. Dispatch Record Time In API call
-    try {
-      final dateStr =
-          "${_now.year}-${_now.month.toString().padLeft(2, '0')}-${_now.day.toString().padLeft(2, '0')}";
-      final timeInStr =
-          "${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}";
-
-      final res = await _attendanceRepository.recordTimeIn({
-        "date": dateStr,
-        "time_in": timeInStr,
-        "lat": locationResult.latitude,
-        "long": locationResult.longitude,
-        "attendance_type": "present",
-      });
 
       if (!mounted) return;
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Self Service'),
+          content: const Text('Are you sure you want to record Time In?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('NO'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('YES'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true) return;
 
-      // Check if backend returned an error
-      if (res['error'] != null && res['error'].toString().isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(res['error'].toString()),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
-        return;
+      final now = DateTime.now();
+      final timeInStr = _apiTime(now);
+      if (kDebugMode) {
+        debugPrint('[RecordTimeIn] Attendance type: present');
+        debugPrint('[RecordTimeIn] Check-in API selected: standard');
       }
+      final res = await _attendanceRepository.recordTimeIn(
+        date: _apiDate(now),
+        timeIn: timeInStr,
+        latitude: locationResult.latitude,
+        longitude: locationResult.longitude,
+      );
 
-      // 4. Update area if selected location != scheduled area ID
+      // Extract time from backend response if available, or use the timeInStr sent
+      final serverTimeStr = res['time_in']?.toString() ??
+          res['last_time_in_datetime']?.toString() ??
+          res['check_in_time']?.toString() ??
+          res['time']?.toString();
+      final checkInTimeFormatted =
+          _formatCheckInTime(serverTimeStr ?? timeInStr, _now);
+
+      // Update area if selected location != scheduled area ID
       final timeInId = res['id'] ?? res['time_in_id'];
       final selectedId = _selectedLocation is WorkLocationItem
           ? _selectedLocation.id
           : (_selectedLocation is TodayWorkLocation
               ? _selectedLocation.id
-              : (_selectedLocation['id'] ?? -1));
+              : null);
 
       if (timeInId != null &&
-          _todayWorkLocation != null &&
+          selectedId != null &&
           selectedId > 0 &&
-          selectedId != _todayWorkLocation!.id) {
-        await _attendanceRepository.updateTodayWorkLocation(timeInId, selectedId);
+          selectedId != _todayWorkAreaId) {
+        await _attendanceRepository.updateTodayWorkLocation(
+          timeInId,
+          selectedId,
+        );
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Time In recorded successfully!'),
-            backgroundColor: AppColors.primary,
-          ),
-        );
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        } else {
-          Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-        }
+        setState(() {
+          _isAlreadyTimeIn = true;
+          _checkInTimeDisplay = checkInTimeFormatted;
+        });
+
+        await _showMessage(res['success'].toString());
       }
-    } catch (e) {
+    } on AttendanceRequestException catch (error) {
+      if (mounted) await _handleAttendanceError(error);
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[RecordTimeIn] Unexpected check-in error: $error');
+      }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to record Time In: $e'),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
+        await _showMessage('Something went wrong. Please try again.');
       }
     } finally {
       if (mounted) {
@@ -352,10 +377,53 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
     }
   }
 
+  Future<void> _showMessage(String message) => showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Self Service'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+
+  Future<void> _handleAttendanceError(AttendanceRequestException error) async {
+    await _showMessage(error.message);
+    if (!error.isAuthenticationError) return;
+    await StorageService.clearSharedPreference();
+    if (mounted) {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.signIn,
+        (_) => false,
+      );
+    }
+  }
+
+  String _apiDate(DateTime dt) =>
+      '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+  String _apiTime(DateTime dt) =>
+      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
   String _formatDate(DateTime dt) {
     final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     return '${dt.day} ${months[dt.month - 1]}, ${dt.year}';
   }
@@ -379,14 +447,22 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
       ),
     );
 
-    String locationName = 'Select Work Location';
-    if (_selectedLocation != null) {
+    String locationName = _isLoadingLocations
+        ? 'Loading work plan...'
+        : _loadError != null
+            ? 'Work plan unavailable'
+            : 'No work plan for today';
+    if (_detectedLocationName != null &&
+        _detectedLocationName!.trim().isNotEmpty) {
+      locationName = _detectedLocationName!;
+    } else if (_selectedLocation != null) {
       if (_selectedLocation is WorkLocationItem) {
         locationName = _selectedLocation.name;
       } else if (_selectedLocation is TodayWorkLocation) {
         locationName = _selectedLocation.name;
       } else if (_selectedLocation is Map) {
-        locationName = _selectedLocation['name'] ?? _selectedLocation.toString();
+        locationName =
+            _selectedLocation['name'] ?? _selectedLocation.toString();
       } else {
         locationName = _selectedLocation.toString();
       }
@@ -399,6 +475,8 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
       body: Column(
         children: [
           _buildHeader(context),
+          if (_isLoadingLocations)
+            const LinearProgressIndicator(color: AppColors.primary),
           Expanded(
             child: Container(
               width: double.infinity,
@@ -453,7 +531,8 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              StorageService.getValue(StorageService.keyFullName)
+                              StorageService.getValue(
+                                          StorageService.keyFullName)
                                       .isNotEmpty
                                   ? '${StorageService.getValue(StorageService.keyFullName)} (${StorageService.getValue(StorageService.keyEmpNo)})'
                                   : 'Employee',
@@ -533,10 +612,65 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                           ],
                         ),
                         const SizedBox(height: 24),
+                        if (_isAlreadyTimeIn &&
+                            _checkInTimeDisplay != null) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F5E9),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFFA5D6A7),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: Color(0xFF2E7D32),
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Status: Checked In',
+                                        style: TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF2E7D32),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'You are checked in at $_checkInTimeDisplay.',
+                                        style: const TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                          color: Color(0xFF1B5E20),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
                         Column(
                           children: [
                             GestureDetector(
-                              onTap: _showLocationModal,
+                              onTap:
+                                  _isAlreadyTimeIn ? null : _showLocationModal,
                               child: Container(
                                 height: 44,
                                 width: double.infinity,
@@ -553,7 +687,7 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                                 child: Row(
                                   children: [
                                     const Icon(
-                                      Icons.location_on_rounded,
+                                      Icons.location_on_outlined,
                                       color: Color(0xFFC6134B),
                                       size: 24,
                                     ),
@@ -571,11 +705,20 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                                         ),
                                       ),
                                     ),
-                                    const Icon(
-                                      Icons.keyboard_arrow_down_rounded,
-                                      color: Color(0xFFC6134B),
-                                      size: 22,
-                                    ),
+                                    if (!_isAlreadyTimeIn)
+                                      Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFFC6134B),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.edit_rounded,
+                                          color: Colors.white,
+                                          size: 15,
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -637,7 +780,10 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                                   ),
                                   const SizedBox(width: 12),
                                   Text(
-                                    _formatTime(_now),
+                                    (_isAlreadyTimeIn &&
+                                            _checkInTimeDisplay != null)
+                                        ? _checkInTimeDisplay!
+                                        : _formatTime(_now),
                                     style: const TextStyle(
                                       fontFamily: 'Outfit',
                                       fontSize: 15,
@@ -675,7 +821,11 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                           width: double.infinity,
                           height: 48,
                           child: ElevatedButton(
-                            onPressed: (_isSubmitting || _isAlreadyTimeIn)
+                            onPressed: (_isSubmitting ||
+                                    _isLoadingLocations ||
+                                    _isAlreadyTimeIn ||
+                                    !_isValidationComplete ||
+                                    _loadError != null)
                                 ? null
                                 : _onTimeIn,
                             style: ElevatedButton.styleFrom(
@@ -701,13 +851,15 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                                   )
                                 : Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: const [
+                                    children: [
                                       Text(
-                                        'Time In',
+                                        _isAlreadyTimeIn
+                                            ? 'Checked In'
+                                            : 'Time In',
                                         textAlign: TextAlign.center,
                                         maxLines: 1,
                                         softWrap: false,
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                           fontFamily: 'Outfit',
                                           color: Colors.white,
                                           fontSize: 16,
@@ -716,9 +868,11 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                                           height: 1.0,
                                         ),
                                       ),
-                                      SizedBox(width: 8),
+                                      const SizedBox(width: 8),
                                       Icon(
-                                        Icons.arrow_forward_rounded,
+                                        _isAlreadyTimeIn
+                                            ? Icons.check_circle_outline_rounded
+                                            : Icons.arrow_forward_rounded,
                                         color: Colors.white,
                                         size: 16,
                                       ),

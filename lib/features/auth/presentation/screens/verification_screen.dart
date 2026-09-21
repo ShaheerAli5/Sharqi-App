@@ -34,29 +34,23 @@ class _VerificationScreenState extends State<VerificationScreen> {
 
   void _startTimer() {
     setState(() {
-      _secondsRemaining = 19;
+      _secondsRemaining = 30;
       _canResend = false;
     });
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsRemaining > 0) {
-        setState(() {
-          _secondsRemaining--;
-        });
+        if (mounted) {
+          setState(() {
+            _secondsRemaining--;
+          });
+        }
       } else {
         timer.cancel();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(AppStrings.otpTimeoutMessage),
-              duration: Duration(seconds: 3),
-            ),
-          );
-          if (Navigator.canPop(context)) {
-            Navigator.pop(context);
-          } else {
-            Navigator.pushReplacementNamed(context, AppRoutes.signIn);
-          }
+          setState(() {
+            _canResend = true;
+          });
         }
       }
     });
@@ -98,8 +92,19 @@ class _VerificationScreenState extends State<VerificationScreen> {
       return;
     }
 
+    FocusScope.of(context).unfocus();
     final empNumber = StorageService.getValue(StorageService.keyEmpNo);
     final companyId = StorageService.getValue(StorageService.keyCompanyId);
+
+    if (empNumber.isEmpty || companyId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Missing required fields: Employee Number or Company ID.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isVerifying = true);
 
@@ -124,6 +129,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(result.error ?? 'Invalid OTP. Please try again.'),
+              backgroundColor: Colors.red.shade700,
             ),
           );
         }

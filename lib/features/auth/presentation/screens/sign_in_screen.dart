@@ -142,6 +142,144 @@ class _SignInScreenState extends State<SignInScreen> {
     );
   }
 
+  Future<void> _showWhatsAppInputDialog(String empNumber, String companyId) async {
+    final TextEditingController phoneController = TextEditingController();
+    final bool? submitted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        bool isSubmittingPhone = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text(
+                'WhatsApp Number Required',
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Mobile number is not registered for this employee. Please enter your WhatsApp number to receive the verification OTP:',
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 13,
+                      color: Color(0xFF1A1310),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      hintText: 'e.g. 974xxxxxxxx',
+                      hintStyle: TextStyle(
+                        fontFamily: 'Outfit',
+                        color: Colors.grey.shade400,
+                        fontSize: 14,
+                      ),
+                      prefixIcon: const Icon(Icons.phone, color: AppColors.primary),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFE8DFE1)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppColors.primary),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: isSubmittingPhone
+                      ? null
+                      : () async {
+                          final phone = phoneController.text.trim();
+                          if (phone.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please enter your WhatsApp number'),
+                              ),
+                            );
+                            return;
+                          }
+                          setDialogState(() => isSubmittingPhone = true);
+                          try {
+                            final res = await _authRepository.addWhatsAppNumber(
+                              empNumber,
+                              companyId,
+                              phone,
+                            );
+                            if (res.isSuccess || res.status != '101') {
+                              if (context.mounted) {
+                                Navigator.pop(context, true);
+                              }
+                            } else {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(res.error ?? 'Failed to register WhatsApp number'),
+                                    backgroundColor: Colors.red.shade700,
+                                  ),
+                                );
+                              }
+                              setDialogState(() => isSubmittingPhone = false);
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error: $e'),
+                                  backgroundColor: Colors.red.shade700,
+                                ),
+                              );
+                            }
+                            setDialogState(() => isSubmittingPhone = false);
+                          }
+                        },
+                  child: isSubmittingPhone
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text(
+                          'Register & Send OTP',
+                          style: TextStyle(color: Colors.white, fontFamily: 'Outfit'),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (submitted == true) {
+      await _onSendVerification();
+    }
+  }
+
   Future<void> _onSendVerification() async {
     if (_selectedCompany == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -160,6 +298,9 @@ class _SignInScreenState extends State<SignInScreen> {
     final companyId = (_selectedCompany['id'] ?? '').toString();
     final companyName = (_selectedCompany['name'] ?? '').toString();
 
+    // Clear any previous user account session to prevent cross-account data leakage
+    await StorageService.clear();
+
     await StorageService.addValue(StorageService.keyCompanyId, companyId);
     await StorageService.addValue(StorageService.keyCompanyName, companyName);
     await StorageService.addValue(StorageService.keyEmpNo, empNumber);
@@ -167,6 +308,16 @@ class _SignInScreenState extends State<SignInScreen> {
     setState(() => _isSendingOtp = true);
     try {
       final otpRes = await _authRepository.sendOTP(empNumber, companyId);
+
+      // Handle Status 101 — WhatsApp Number Required
+      if (otpRes.isStatus101) {
+        setState(() => _isSendingOtp = false);
+        if (mounted) {
+          await _showWhatsAppInputDialog(empNumber, companyId);
+        }
+        return;
+      }
+
       if (otpRes.isSuccess) {
         if (otpRes.registerMobile != null &&
             otpRes.registerMobile!.isNotEmpty) {
