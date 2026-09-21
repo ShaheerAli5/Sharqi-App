@@ -188,7 +188,7 @@ class _SelfServiceWebScreenState extends State<SelfServiceWebScreen> {
                 ),
               ),
               const Text(
-                'SELF SERVICE WEB',
+                 'SELF SERVICE ',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 12,
