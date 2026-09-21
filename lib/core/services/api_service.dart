@@ -11,9 +11,11 @@ class ApiService {
         Dio(
           BaseOptions(
             baseUrl: baseUrl,
-            connectTimeout: const Duration(seconds: 12),
-            receiveTimeout: const Duration(seconds: 12),
-            sendTimeout: const Duration(seconds: 12),
+            // Match the native OkHttp client. Some valid employees take more
+            // than a few seconds to complete OTP verification.
+            connectTimeout: const Duration(seconds: 60),
+            receiveTimeout: const Duration(seconds: 60),
+            sendTimeout: const Duration(seconds: 60),
             headers: {
               'accept': 'application/json',
               'content-type': 'application/json',
@@ -21,7 +23,14 @@ class ApiService {
           ),
         );
 
-    _dio.interceptors.add(LogInterceptor(responseBody: false, requestBody: false));
+    _dio.interceptors.add(
+      LogInterceptor(
+        requestBody: false,
+        requestHeader: false,
+        responseBody: false,
+        responseHeader: false,
+      ),
+    );
   }
 
   /// Helper method that automatically encapsulates payloads inside `{"params": params}`
@@ -46,7 +55,8 @@ class ApiService {
   }
 
   /// Helper method that tries a list of candidate endpoints until one returns a valid non-404 response
-  Future<Response> _postRpcWithFallback(List<String> endpoints, dynamic params) async {
+  Future<Response> _postRpcWithFallback(
+      List<String> endpoints, dynamic params) async {
     Response? lastResponse;
 
     for (int i = 0; i < endpoints.length; i++) {
@@ -206,29 +216,7 @@ class ApiService {
       'api_token': apiToken,
       'date': date,
       'time_in': timeIn,
-      'geo_location': '$lat,$long',
-      'lat': lat,
-      'long': long,
-      'attendance_type': attendanceType,
-    });
-  }
-
-  /// 10. Record Time In (Secure/Geo) -> POST attendance/check/in/secure
-  Future<Response> recordTimeInSecure({
-    required String employeeNumber,
-    required dynamic companyId,
-    required String apiToken,
-    required String timeIn,
-    required double lat,
-    required double long,
-    String attendanceType = 'present',
-  }) {
-    return _postRpc('attendance/check/in/secure', {
-      'employee_number': employeeNumber,
-      'company_id': companyId,
-      'api_token': apiToken,
-      'time_in': timeIn,
-      'geo_location': '$lat,$long',
+      'geo_location': 'lat,long',
       'lat': lat,
       'long': long,
       'attendance_type': attendanceType,

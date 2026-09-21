@@ -1,14 +1,124 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+
 import '../../data/models/app_models.dart';
 import '../../data/models/portal_service_item.dart';
 import '../constants/app_strings.dart';
 import 'api_service.dart';
 import 'storage_service.dart';
 
+class AttendanceRequestException implements Exception {
+  final String message;
+  final bool isAuthenticationError;
+  final bool isNetworkError;
+
+  const AttendanceRequestException(
+    this.message, {
+    this.isAuthenticationError = false,
+    this.isNetworkError = false,
+  });
+
+  @override
+  String toString() => message;
+}
+
+class NoPlanForTodayException extends AttendanceRequestException {
+  const NoPlanForTodayException() : super('No plan found for today');
+}
+
 class AttendanceRepository {
   final ApiService _apiService;
 
   AttendanceRepository({ApiService? apiService})
       : _apiService = apiService ?? ApiService();
+
+  Map<String, dynamic> _attendanceSession() {
+    final employeeNumber =
+        StorageService.getValue(StorageService.keyEmpNo).trim();
+    final companyId =
+        StorageService.getValue(StorageService.keyCompanyId).trim();
+    final apiToken =
+        StorageService.getValue(StorageService.keyAccessToken).trim();
+    if (employeeNumber.isEmpty || companyId.isEmpty || apiToken.isEmpty) {
+      throw const AttendanceRequestException(
+        'Your session is incomplete. Please sign in again.',
+        isAuthenticationError: true,
+      );
+    }
+    return {
+      'employee_number': employeeNumber,
+      'company_id': companyId,
+      'api_token': apiToken,
+    };
+  }
+
+  Future<T> _attendanceRequest<T>(Future<T> Function() request) async {
+    try {
+      return await request();
+    } on AttendanceRequestException {
+      rethrow;
+    } on DioException catch (error) {
+      final code = error.response?.statusCode;
+      if (code == 401 || code == 403) {
+        throw const AttendanceRequestException(
+          'Your session has expired. Please sign in again.',
+          isAuthenticationError: true,
+        );
+      }
+      if (error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout) {
+        throw const AttendanceRequestException(
+          'Unable to connect to the server. Please check your internet connection.',
+          isNetworkError: true,
+        );
+      }
+      if (code != null && code >= 500) {
+        throw const AttendanceRequestException(
+          'The server is temporarily unavailable. Please try again later.',
+        );
+      }
+      throw const AttendanceRequestException(
+        'Unable to complete the request. Please try again.',
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[RecordTimeIn] Unexpected request error: $error');
+      }
+      throw const AttendanceRequestException(
+        'Something went wrong. Please try again.',
+      );
+    }
+  }
+
+  Map<String, dynamic> _resultMap(dynamic data, String operation) {
+    if (data is Map && data['result'] is Map) {
+      return Map<String, dynamic>.from(data['result'] as Map);
+    }
+    if (kDebugMode) {
+      debugPrint('[RecordTimeIn] Invalid $operation response: $data');
+    }
+    throw const AttendanceRequestException(
+      'The server returned an unexpected response. Please try again.',
+    );
+  }
+
+  Never _throwResultError(
+    Map<String, dynamic> result, {
+    bool allowNoPlan = false,
+  }) {
+    final message = result['error']?.toString().trim() ?? '';
+    if (allowNoPlan && message.toLowerCase() == 'no plan found for today') {
+      throw const NoPlanForTodayException();
+    }
+    throw AttendanceRequestException(
+      message.isEmpty
+          ? 'The server returned an unexpected response. Please try again.'
+          : message,
+      isAuthenticationError: message == 'Employee not found in system',
+    );
+  }
 
   // ignore: unused_element
   Map<String, dynamic> _defaultParams() => {
@@ -33,13 +143,18 @@ class AttendanceRepository {
 
     if (response.statusCode == 200 && response.data != null) {
       if (response.data is Map<String, dynamic>) {
-        final dashData = DashboardData.fromJson(response.data as Map<String, dynamic>);
-        if (employeeNumber == null || employeeNumber == StorageService.getValue(StorageService.keyEmpNo)) {
+        final dashData =
+            DashboardData.fromJson(response.data as Map<String, dynamic>);
+        if (employeeNumber == null ||
+            employeeNumber ==
+                StorageService.getValue(StorageService.keyEmpNo)) {
           if (dashData.qidNumber.isNotEmpty) {
-            await StorageService.addValue(StorageService.keyQid, dashData.qidNumber);
+            await StorageService.addValue(
+                StorageService.keyQid, dashData.qidNumber);
           }
           if (dashData.qidExpiry.isNotEmpty) {
-            await StorageService.addValue(StorageService.keyQidExpiry, dashData.qidExpiry);
+            await StorageService.addValue(
+                StorageService.keyQidExpiry, dashData.qidExpiry);
           }
         }
         return dashData;
@@ -115,159 +230,171 @@ class AttendanceRepository {
 
   /// 3. Get All Work Locations List
   Future<List<WorkLocationItem>> getWorkLocationList() async {
-    final empNo = StorageService.getValue(StorageService.keyEmpNo);
-    final companyId = StorageService.getValue(StorageService.keyCompanyId);
-    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
-
-    try {
+    return _attendanceRequest(() async {
+      final session = _attendanceSession();
       final response = await _apiService.getWorkLocationList(
-        employeeNumber: empNo,
-        companyId: companyId,
-        apiToken: apiToken,
+        employeeNumber: session['employee_number'],
+        companyId: session['company_id'],
+        apiToken: session['api_token'],
       );
-
-      if (response.statusCode == 200 && response.data != null) {
-        if (response.data is Map<String, dynamic>) {
-          final result = response.data['result'];
-          if (result is List && result.isNotEmpty) {
-            return result
-                .map((e) => WorkLocationItem.fromJson(e as Map<String, dynamic>))
-                .toList();
-          }
-        }
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        throw const AttendanceRequestException(
+          'Your session has expired. Please sign in again.',
+          isAuthenticationError: true,
+        );
       }
-    } catch (_) {}
-
-    return [
-      WorkLocationItem(id: 1, name: 'Doha Head Office', code: false),
-      WorkLocationItem(id: 2, name: 'Al Sharqi Yard', code: false),
-      WorkLocationItem(id: 3, name: 'Ras Laffan Site', code: false),
-      WorkLocationItem(id: 4, name: 'Mesaieed Logistics Hub', code: false),
-      WorkLocationItem(id: 5, name: 'Tower A - Construction Site', code: false),
-      WorkLocationItem(id: 6, name: 'Al-Azzizya Hotel', code: false),
-    ];
+      if (response.statusCode != 200 || response.data is! Map) {
+        throw const AttendanceRequestException(
+          'Unable to load work locations. Please try again.',
+        );
+      }
+      final result = (response.data as Map)['result'];
+      if (result is! List) {
+        throw const AttendanceRequestException(
+          'The server returned an unexpected work-location response.',
+        );
+      }
+      return result
+          .whereType<Map>()
+          .map((item) => WorkLocationItem.fromJson(
+                Map<String, dynamic>.from(item),
+              ))
+          .toList();
+    });
   }
 
   /// 4. Get Today's Work Location
-  Future<TodayWorkLocation> getTodayWorkLocation() async {
-    final empNo = StorageService.getValue(StorageService.keyEmpNo);
-    final companyId = StorageService.getValue(StorageService.keyCompanyId);
-    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
-
-    final response = await _apiService.getTodayWorkLocation(
-      employeeNumber: empNo,
-      companyId: companyId,
-      apiToken: apiToken,
-    );
-
-    if (response.statusCode == 200 && response.data != null) {
-      if (response.data is Map<String, dynamic>) {
-        return TodayWorkLocation.fromJson(
-            response.data as Map<String, dynamic>);
-      }
-    }
-    return TodayWorkLocation(id: -1, name: '');
-  }
+  Future<TodayWorkLocation> getTodayWorkLocation() =>
+      _attendanceRequest(() async {
+        final session = _attendanceSession();
+        final response = await _apiService.getTodayWorkLocation(
+          employeeNumber: session['employee_number'],
+          companyId: session['company_id'],
+          apiToken: session['api_token'],
+        );
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          throw const AttendanceRequestException(
+            'Your session has expired. Please sign in again.',
+            isAuthenticationError: true,
+          );
+        }
+        if (response.statusCode != 200) {
+          throw const AttendanceRequestException(
+            'Unable to load today\'s work plan. Please try again.',
+          );
+        }
+        final result = _resultMap(response.data, "today's work plan");
+        if (result.containsKey('error')) {
+          _throwResultError(result, allowNoPlan: true);
+        }
+        final area = result['area_id'];
+        if (area is! Map || area['id'] == null) {
+          throw const AttendanceRequestException(
+            'The work plan is missing required location information.',
+          );
+        }
+        final plan = TodayWorkLocation.fromJson({'result': result});
+        if (plan.id <= 0 || plan.name.trim().isEmpty) {
+          throw const AttendanceRequestException(
+            'The work plan contains invalid location information.',
+          );
+        }
+        return plan;
+      });
 
   /// 5. Update Today's Work Area
-  Future<dynamic> updateTodayWorkLocation(dynamic timeInId, [dynamic areaId]) async {
-    final tId = areaId != null ? timeInId : timeInId;
-    final aId = areaId ?? timeInId;
-
-    final response = await _apiService.updateTodayWorkLocation(
-      timeInId: tId,
-      areaId: aId,
-    );
-    if (response.data is Map<String, dynamic>) {
-      final resMap = response.data as Map<String, dynamic>;
-      final result = resMap['result'];
-      if (result is Map<String, dynamic>) {
+  Future<dynamic> updateTodayWorkLocation(
+    dynamic timeInId,
+    dynamic areaId,
+  ) =>
+      _attendanceRequest(() async {
+        final response = await _apiService.updateTodayWorkLocation(
+          timeInId: timeInId,
+          areaId: areaId,
+        );
+        if (response.statusCode != 200) {
+          throw const AttendanceRequestException(
+            'Time In was recorded, but the work location could not be updated.',
+          );
+        }
+        final result = _resultMap(response.data, 'work-location update');
+        if (result.containsKey('error')) _throwResultError(result);
         return result;
-      }
-    }
-    return response.data;
-  }
+      });
 
   /// 6. Check Today's Time In/Out Status
-  Future<TimeInOutStatus> getTodaysTimeInOut() async {
-    final empNo = StorageService.getValue(StorageService.keyEmpNo);
-    final companyId = StorageService.getValue(StorageService.keyCompanyId);
-    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
+  Future<TimeInOutStatus> getTodaysTimeInOut() => _attendanceRequest(() async {
+        final session = _attendanceSession();
+        final response = await _apiService.getTodaysTimeInOut(
+          employeeNumber: session['employee_number'],
+          companyId: session['company_id'],
+          apiToken: session['api_token'],
+        );
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          throw const AttendanceRequestException(
+            'Your session has expired. Please sign in again.',
+            isAuthenticationError: true,
+          );
+        }
+        if (response.statusCode != 200) {
+          throw const AttendanceRequestException(
+            'Unable to load attendance status. Please try again.',
+          );
+        }
+        final result = _resultMap(response.data, 'attendance status');
+        if (result.containsKey('error')) _throwResultError(result);
+        if (!result.containsKey('success')) {
+          throw const AttendanceRequestException(
+            'The server returned an invalid attendance status.',
+          );
+        }
+        return TimeInOutStatus.fromJson({'result': result});
+      });
 
-    final response = await _apiService.getTodaysTimeInOut(
-      employeeNumber: empNo,
-      companyId: companyId,
-      apiToken: apiToken,
-    );
-
-    if (response.statusCode == 200 && response.data != null) {
-      if (response.data is Map<String, dynamic>) {
-        return TimeInOutStatus.fromJson(response.data as Map<String, dynamic>);
-      }
-    }
-    return TimeInOutStatus(isTimeIn: false, lastTimeInDatetime: '');
-  }
-
-  /// 7. Record Time In (Standard & Secure Geo)
-  Future<Map<String, dynamic>> recordTimeIn(Map<String, dynamic> extraParams) async {
-    return recordTimeInSecure(extraParams);
-  }
-
-  /// Record Time In (Secure/GEO - Section 5.2)
-  Future<Map<String, dynamic>> recordTimeInSecure(Map<String, dynamic> extraParams) async {
-    final empNo = StorageService.getValue(StorageService.keyEmpNo);
-    final companyId = StorageService.getValue(StorageService.keyCompanyId);
-    final apiToken = StorageService.getValue(StorageService.keyAccessToken);
-
-    final now = DateTime.now();
-    final timeInStr = extraParams['time_in']?.toString() ??
-        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
-    final lat = (extraParams['lat'] is num)
-        ? (extraParams['lat'] as num).toDouble()
-        : 0.0;
-    final long = (extraParams['long'] is num)
-        ? (extraParams['long'] as num).toDouble()
-        : 0.0;
-    final attendanceType =
-        extraParams['attendance_type']?.toString() ?? 'present';
-
-    final response = await _apiService.recordTimeInSecure(
-      employeeNumber: empNo,
-      companyId: companyId,
-      apiToken: apiToken,
-      timeIn: timeInStr,
-      lat: lat,
-      long: long,
-      attendanceType: attendanceType,
-    );
-
-    if (response.data is Map<String, dynamic>) {
-      final resMap = response.data as Map<String, dynamic>;
-
-      if (resMap['error'] != null && resMap['error'].toString().isNotEmpty) {
-        return {'error': resMap['error'].toString()};
-      }
-
-      final result = resMap['result'];
-      if (result is Map<String, dynamic>) {
-        if (result['error'] != null && result['error'].toString().isNotEmpty) {
-          return {'error': result['error'].toString()};
+  /// 7. Record Time In using the endpoint and payload used by the Kotlin app.
+  Future<Map<String, dynamic>> recordTimeIn({
+    required String date,
+    required String timeIn,
+    required double latitude,
+    required double longitude,
+    String attendanceType = 'present',
+  }) =>
+      _attendanceRequest(() async {
+        final session = _attendanceSession();
+        final response = await _apiService.recordTimeIn(
+          employeeNumber: session['employee_number'],
+          companyId: session['company_id'],
+          apiToken: session['api_token'],
+          date: date,
+          timeIn: timeIn,
+          lat: latitude,
+          long: longitude,
+          attendanceType: attendanceType,
+        );
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          throw const AttendanceRequestException(
+            'Your session has expired. Please sign in again.',
+            isAuthenticationError: true,
+          );
+        }
+        if (response.statusCode != 200) {
+          throw const AttendanceRequestException(
+            'Unable to record Time In. Please try again.',
+          );
+        }
+        final result = _resultMap(response.data, 'check-in');
+        if (result.containsKey('error')) _throwResultError(result);
+        if (result['success'] == null) {
+          throw const AttendanceRequestException(
+            'The server returned an invalid check-in response.',
+          );
         }
         return result;
-      } else if (result is String && result.isNotEmpty) {
-        if (result.toLowerCase().contains('error') ||
-            result.toLowerCase().contains('sorry') ||
-            result.toLowerCase().contains('already')) {
-          return {'error': result};
-        }
-        return {'success': result};
-      }
-    }
-    return {'error': 'Failed to record Secure Time In'};
-  }
+      });
 
   /// 8. Record Time Out
-  Future<Map<String, dynamic>> recordTimeOut(Map<String, dynamic> extraParams) async {
+  Future<Map<String, dynamic>> recordTimeOut(
+      Map<String, dynamic> extraParams) async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
     final companyId = StorageService.getValue(StorageService.keyCompanyId);
     final apiToken = StorageService.getValue(StorageService.keyAccessToken);
@@ -380,7 +507,8 @@ class AttendanceRepository {
               result['data'];
           if (logs is List) {
             return logs
-                .map((e) => NotificationItem.fromJson(e as Map<String, dynamic>))
+                .map(
+                    (e) => NotificationItem.fromJson(e as Map<String, dynamic>))
                 .toList();
           }
         } else if (result is List) {
@@ -467,7 +595,8 @@ class AttendanceRepository {
   }
 
   /// Check Employee Attendance (POST /get/employee/attendance)
-  Future<bool> checkEmployeeAttendance({String attendanceType = 'present'}) async {
+  Future<bool> checkEmployeeAttendance(
+      {String attendanceType = 'present'}) async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
     final companyId = StorageService.getValue(StorageService.keyCompanyId);
 
@@ -590,19 +719,23 @@ class AttendanceRepository {
     ];
   }
 
-  Map<String, dynamic> parseSubmitResponse(dynamic responseData, String requestType) {
+  Map<String, dynamic> parseSubmitResponse(
+      dynamic responseData, String requestType) {
     if (responseData is Map<String, dynamic>) {
       if (responseData['error'] != null &&
           responseData['error'].toString().isNotEmpty) {
         final errMap = responseData['error'];
         String errStr = errMap.toString();
         if (errMap is Map) {
-          if (errMap['message'] != null && errMap['message'].toString().isNotEmpty) {
+          if (errMap['message'] != null &&
+              errMap['message'].toString().isNotEmpty) {
             errStr = errMap['message'].toString();
           }
         }
-        if (errStr.contains('404') || errStr.toLowerCase().contains('not found')) {
-          errStr = 'Self-service submission endpoint is not registered on the server (404 Not Found). Please verify backend deployment.';
+        if (errStr.contains('404') ||
+            errStr.toLowerCase().contains('not found')) {
+          errStr =
+              'Self-service submission endpoint is not registered on the server (404 Not Found). Please verify backend deployment.';
         }
         return {
           'success': false,
@@ -717,8 +850,7 @@ class AttendanceRepository {
 
     return {
       'success': false,
-      'error':
-          'Failed to submit Complaint. Invalid server response.'
+      'error': 'Failed to submit Complaint. Invalid server response.'
     };
   }
 
@@ -799,13 +931,15 @@ class AttendanceRepository {
         };
       }
     } catch (e) {
-      return {'success': false, 'error': 'Failed to submit Employee Request: $e'};
+      return {
+        'success': false,
+        'error': 'Failed to submit Employee Request: $e'
+      };
     }
 
     return {
       'success': false,
-      'error':
-          'Failed to submit Employee Request. Invalid server response.'
+      'error': 'Failed to submit Employee Request. Invalid server response.'
     };
   }
 
@@ -886,8 +1020,7 @@ class AttendanceRepository {
 
     return {
       'success': false,
-      'error':
-          'Failed to submit Leave Request. Invalid server response.'
+      'error': 'Failed to submit Leave Request. Invalid server response.'
     };
   }
 
@@ -935,8 +1068,7 @@ class AttendanceRepository {
 
     return {
       'success': false,
-      'error':
-          'Failed to submit Bright Idea. Invalid server response.'
+      'error': 'Failed to submit Bright Idea. Invalid server response.'
     };
   }
 
@@ -963,7 +1095,8 @@ class AttendanceRepository {
       );
 
       if (response.data != null) {
-        final parsed = parseSubmitResponse(response.data, 'Salary Slip Request');
+        final parsed =
+            parseSubmitResponse(response.data, 'Salary Slip Request');
         if (parsed['success'] == true ||
             (parsed.containsKey('error') &&
                 parsed['error'].toString().isNotEmpty)) {
@@ -979,18 +1112,21 @@ class AttendanceRepository {
         };
       }
     } catch (e) {
-      return {'success': false, 'error': 'Failed to submit Salary Slip Request: $e'};
+      return {
+        'success': false,
+        'error': 'Failed to submit Salary Slip Request: $e'
+      };
     }
 
     return {
       'success': false,
-      'error':
-          'Failed to submit Salary Slip Request. Invalid server response.'
+      'error': 'Failed to submit Salary Slip Request. Invalid server response.'
     };
   }
 
   /// 20. Track & Retrieve Cases directly from Backend API
-  Future<List<Map<String, dynamic>>> getEmployeeCases({String code = ''}) async {
+  Future<List<Map<String, dynamic>>> getEmployeeCases(
+      {String code = ''}) async {
     final empNo = StorageService.getValue(StorageService.keyEmpNo);
     final companyId = StorageService.getValue(StorageService.keyCompanyId);
     final apiToken = StorageService.getValue(StorageService.keyAccessToken);
@@ -1008,12 +1144,9 @@ class AttendanceRepository {
             .toString();
         if (newCode.isNotEmpty) {
           final exists = allCases.any((c) {
-            final existingCode = (c['code'] ??
-                    c['reference'] ??
-                    c['name'] ??
-                    c['id'] ??
-                    '')
-                .toString();
+            final existingCode =
+                (c['code'] ?? c['reference'] ?? c['name'] ?? c['id'] ?? '')
+                    .toString();
             return existingCode == newCode;
           });
           if (!exists) {

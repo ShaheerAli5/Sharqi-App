@@ -39,8 +39,10 @@ class LocationService {
       try {
         serviceEnabled = await Geolocator.isLocationServiceEnabled();
       } catch (e) {
-        if (e is MissingPluginException || '$e'.contains('MissingPluginException')) {
-          return LocationResult.error('Location service plugin not initialized.');
+        if (e is MissingPluginException ||
+            '$e'.contains('MissingPluginException')) {
+          return LocationResult.error(
+              'Location service plugin not initialized.');
         }
         serviceEnabled = false;
       }
@@ -66,24 +68,20 @@ class LocationService {
               'Location permissions are permanently denied. Please enable location permissions in app settings.');
         }
       } catch (e) {
-        if (e is MissingPluginException || '$e'.contains('MissingPluginException')) {
-          return LocationResult.error('Location permission plugin not initialized.');
+        if (e is MissingPluginException ||
+            '$e'.contains('MissingPluginException')) {
+          return LocationResult.error(
+              'Location permission plugin not initialized.');
         }
       }
 
-      Position? position;
+      Position position;
       try {
         position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
           timeLimit: const Duration(seconds: 10),
         );
       } catch (_) {
-        try {
-          position = await Geolocator.getLastKnownPosition();
-        } catch (_) {}
-      }
-
-      if (position == null) {
         return LocationResult.error(
             'Unable to acquire accurate GPS location. Please ensure you have a clear view of the sky and GPS is enabled.');
       }
@@ -194,10 +192,8 @@ class LocationService {
             parts.add(mainPlace.toString().trim());
           }
 
-          final city = addr['city'] ??
-              addr['town'] ??
-              addr['district'] ??
-              addr['state'];
+          final city =
+              addr['city'] ?? addr['town'] ?? addr['district'] ?? addr['state'];
           if (city != null &&
               city.toString().trim().isNotEmpty &&
               !parts.contains(city.toString().trim())) {

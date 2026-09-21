@@ -78,52 +78,44 @@ class AuthRepository {
     String? deviceInfo,
     String deviceType = 'android',
   }) async {
-    final isMasterOtp = (otp == '3285');
-
     try {
-      final timeoutDuration = isMasterOtp
-          ? const Duration(seconds: 3)
-          : const Duration(seconds: 12);
+      final response = await _apiService.verifyOtp(
+        employeeNumber: employeeNumber,
+        companyId: companyId,
+        otp: otp,
+        deviceToken: deviceToken,
+        deviceInfo: deviceInfo,
+        deviceType: deviceType,
+      );
 
-      dynamic response;
-      try {
-        response = await _apiService
-            .verifyOtp(
-              employeeNumber: employeeNumber,
-              companyId: companyId,
-              otp: otp,
-              deviceToken: deviceToken,
-              deviceInfo: deviceInfo,
-              deviceType: deviceType,
-            )
-            .timeout(timeoutDuration);
-      } catch (_) {
-        response = null;
-      }
-
-      if (response != null &&
-          response.statusCode == 200 &&
-          response.data != null) {
+      if (response.statusCode == 200 && response.data != null) {
         final map = response.data is Map<String, dynamic>
             ? response.data as Map<String, dynamic>
             : <String, dynamic>{};
 
         final verifyRes = VerifyOtpResponse.fromJson(map);
 
-        if (verifyRes.isSuccess || isMasterOtp) {
+        if (verifyRes.isSuccess && verifyRes.apiToken.isNotEmpty) {
           await _saveUserSession(verifyRes, companyId);
-          if (isMasterOtp && !verifyRes.isSuccess) {
-            return _buildMasterOtpSuccessResponse(companyId);
-          }
           return verifyRes;
         }
 
-        return verifyRes;
-      }
+        if (verifyRes.isSuccess && verifyRes.apiToken.isEmpty) {
+          return VerifyOtpResponse(
+            employeeId: 0,
+            name: '',
+            empNo: '',
+            phone: '',
+            email: '',
+            company: '',
+            apiToken: '',
+            profileImageBase64: '',
+            whatsappPhone: '',
+            error: 'Invalid login response. Please try again.',
+          );
+        }
 
-      if (isMasterOtp) {
-        await _saveMasterOtpSession(companyId);
-        return _buildMasterOtpSuccessResponse(companyId);
+        return verifyRes;
       }
 
       return VerifyOtpResponse(
@@ -139,10 +131,6 @@ class AuthRepository {
         error: 'Verification timed out or failed. Please try again.',
       );
     } catch (e) {
-      if (isMasterOtp) {
-        await _saveMasterOtpSession(companyId);
-        return _buildMasterOtpSuccessResponse(companyId);
-      }
       return VerifyOtpResponse(
         employeeId: 0,
         name: '',
@@ -170,32 +158,39 @@ class AuthRepository {
     await StorageService.removeValue(StorageService.keyQidExpiry);
   }
 
-  Future<void> _saveUserSession(VerifyOtpResponse verifyRes, dynamic companyId) async {
+  Future<void> _saveUserSession(
+      VerifyOtpResponse verifyRes, dynamic companyId) async {
     await _clearPreviousSession();
 
     if (verifyRes.apiToken.isNotEmpty) {
-      await StorageService.addValue(StorageService.keyAccessToken, verifyRes.apiToken);
+      await StorageService.addValue(
+          StorageService.keyAccessToken, verifyRes.apiToken);
     }
     if (verifyRes.name.isNotEmpty) {
       await StorageService.addValue(StorageService.keyFullName, verifyRes.name);
     }
     if (verifyRes.employeeId > 0) {
-      await StorageService.addInt(StorageService.keyEmpId, verifyRes.employeeId);
+      await StorageService.addInt(
+          StorageService.keyEmpId, verifyRes.employeeId);
     }
     if (verifyRes.empNo.isNotEmpty) {
       await StorageService.addValue(StorageService.keyEmpNo, verifyRes.empNo);
     }
-    if (verifyRes.profileImageBase64.isNotEmpty && verifyRes.profileImageBase64 != 'N/A') {
-      await StorageService.addValue(StorageService.keyProfileImage, verifyRes.profileImageBase64);
+    if (verifyRes.profileImageBase64.isNotEmpty &&
+        verifyRes.profileImageBase64 != 'N/A') {
+      await StorageService.addValue(
+          StorageService.keyProfileImage, verifyRes.profileImageBase64);
     }
     if (verifyRes.company.isNotEmpty) {
-      await StorageService.addValue(StorageService.keyCompanyName, verifyRes.company);
+      await StorageService.addValue(
+          StorageService.keyCompanyName, verifyRes.company);
     }
     if (verifyRes.phone.isNotEmpty) {
       await StorageService.addValue(StorageService.keyPhone, verifyRes.phone);
     }
     if (verifyRes.whatsappPhone.isNotEmpty) {
-      await StorageService.addValue(StorageService.keyWhatsAppPhone, verifyRes.whatsappPhone);
+      await StorageService.addValue(
+          StorageService.keyWhatsAppPhone, verifyRes.whatsappPhone);
     }
     if (verifyRes.email.isNotEmpty) {
       await StorageService.addValue(StorageService.keyEmail, verifyRes.email);
@@ -204,36 +199,12 @@ class AuthRepository {
       await StorageService.addValue(StorageService.keyQid, verifyRes.qidNumber);
     }
     if (verifyRes.qidExpiry.isNotEmpty) {
-      await StorageService.addValue(StorageService.keyQidExpiry, verifyRes.qidExpiry);
+      await StorageService.addValue(
+          StorageService.keyQidExpiry, verifyRes.qidExpiry);
     }
     if (companyId != null) {
-      await StorageService.addValue(StorageService.keyCompanyId, companyId.toString());
+      await StorageService.addValue(
+          StorageService.keyCompanyId, companyId.toString());
     }
-  }
-
-  Future<void> _saveMasterOtpSession(dynamic companyId) async {
-    await StorageService.addValue(StorageService.keyAccessToken, 'master_token_3285');
-    if (companyId != null) {
-      await StorageService.addValue(StorageService.keyCompanyId, companyId.toString());
-    }
-  }
-
-  VerifyOtpResponse _buildMasterOtpSuccessResponse(dynamic companyId) {
-    return VerifyOtpResponse(
-      success: 'Login Successful',
-      employeeId: StorageService.getInt(StorageService.keyEmpId),
-      name: StorageService.getValue(StorageService.keyFullName).isNotEmpty
-          ? StorageService.getValue(StorageService.keyFullName)
-          : 'Employee',
-      empNo: StorageService.getValue(StorageService.keyEmpNo),
-      phone: StorageService.getValue(StorageService.keyPhone),
-      email: StorageService.getValue(StorageService.keyEmail),
-      company: StorageService.getValue(StorageService.keyCompanyName),
-      apiToken: StorageService.getValue(StorageService.keyAccessToken).isNotEmpty
-          ? StorageService.getValue(StorageService.keyAccessToken)
-          : 'master_token_3285',
-      profileImageBase64: StorageService.getValue(StorageService.keyProfileImage),
-      whatsappPhone: StorageService.getValue(StorageService.keyWhatsAppPhone),
-    );
   }
 }
