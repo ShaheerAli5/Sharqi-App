@@ -1,4 +1,4 @@
-name: sharqi
+name: self_service_app
 description: "A new Flutter project."
 publish_to: 'none'
 
@@ -38,6 +38,7 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - assets/data/work_locations.json
 
 flutter_launcher_icons:
   image_path: "assets/icons/launcher icon.png"

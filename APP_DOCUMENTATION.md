@@ -1,6 +1,6 @@
-# Al Sharqi Holding Self Service App — Complete Technical Documentation
+# Self Service — Complete Technical Documentation
 
-**Target App:** Al Sharqi Holding Self Service App (`com.selfservice.app`)  
+**Target App:** Self Service (`com.selfservice.app`)  
 **Flutter Workspace:** `C:\Users\Shaheer\Documents\GitHub\Sharqi-App`  
 **Native Source Codebase:** `D:\selfservice-webview-new_updates_nov_2024`  
 **Backend Host:** `https://erp.alsharqiholding.qa`  

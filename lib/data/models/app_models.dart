@@ -9,3 +9,4 @@ export 'work_location_item.dart';
 export 'attendance_item.dart';
 export 'work_plan_item.dart';
 export 'notification_item.dart';
+export 'check_in_location.dart';

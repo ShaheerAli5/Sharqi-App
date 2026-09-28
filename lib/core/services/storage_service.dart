@@ -13,15 +13,20 @@ class StorageService {
   static const String keyPhone = "PHONE";
   static const String keyProfileImage = "PROFILE_IMAGE";
   static const String keyWhatsAppPhone = "WHATS_APP_PHONE";
-  static const String keyWhatsAppData = "WHATS_APP_PHONE"; // Alias for backward compatibility
+  static const String keyWhatsAppData =
+      "WHATS_APP_PHONE"; // Alias for backward compatibility
   static const String keyCompanyName = "COMPANY_NAME";
   static const String keyQid = "QID_NUMBER";
   static const String keyQidExpiry = "QID_EXPIRY";
+  static const String keyActiveCheckInLocation = "ACTIVE_CHECK_IN_LOCATION";
 
   static SharedPreferences? _prefs;
 
   static Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
+    // Remove coordinate caches created by older builds. Work-location
+    // coordinates must always come from the current Odoo API response.
+    await _prefs?.remove('RESOLVED_WORK_LOCATIONS');
   }
 
   static Future<void> addValue(String key, String value) async {
@@ -80,12 +85,22 @@ class StorageService {
     }
   }
 
+  /// A persisted session is usable only when all identifiers required by the
+  /// authenticated API calls are present. This lets the app restore login
+  /// after a normal close, restart, or phone reboot.
+  static bool hasActiveSession() {
+    return getValue(keyAccessToken).trim().isNotEmpty &&
+        getValue(keyEmpNo).trim().isNotEmpty &&
+        getValue(keyCompanyId).trim().isNotEmpty;
+  }
+
   static Future<void> putObject(String key, dynamic obj) async {
     final jsonString = jsonEncode(obj);
     await addValue(key, jsonString);
   }
 
-  static T? getObject<T>(String key, T Function(Map<String, dynamic> json) fromJson) {
+  static T? getObject<T>(
+      String key, T Function(Map<String, dynamic> json) fromJson) {
     final jsonString = getValue(key);
     if (jsonString.isEmpty) return null;
     try {

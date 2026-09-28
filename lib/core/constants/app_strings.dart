@@ -1,9 +1,9 @@
 class AppStrings {
   AppStrings._();
 
-  static const String appName = 'Al Sharqi Holding';
-  static const String splashTitleArabic = 'الشرقي القابضة';
-  static const String splashTitleEnglish = 'AL SHARQI HOLDING';
+  static const String appName = 'Self Service';
+  static const String splashTitleArabic = 'الخدمة الذاتية';
+  static const String splashTitleEnglish = 'SELF SERVICE';
 
   // Auth / Sign In (Step 1)
   static const String stepSignInBadge = 'STEP 1 OF 2 — SIGN IN';
@@ -80,7 +80,7 @@ class AppStrings {
   // Self Service Portal
   static const String selfServicePortalTitle = 'SELF SERVICE PORTAL';
   static const String portalIntroSubtitle =
-      "An online service portal for Alsharqi Holding Group's Employees";
+      "An online service portal for Employees";
   static const String complaintTitle = 'COMPLAINT';
   static const String complaintDesc = 'Any complaint can be recorded here.';
   static const String employeeRequestTitle = 'EMPLOYEE REQUEST';

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sharqi/main.dart';
+import 'package:self_service_app/main.dart';
 
 void main() {
   testWidgets('App loads smoke test', (WidgetTester tester) async {

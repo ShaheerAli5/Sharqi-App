@@ -1,6 +1,6 @@
 # Complete Native App → Flutter Migration & API Integration Report
 
-**Target App:** Al Sharqi Holding Self Service App (`com.selfservice.app`)  
+**Target App:** Self Service (`com.selfservice.app`)  
 **Native Source Codebase:** `D:\selfservice-webview-new_updates_nov_2024`  
 **Flutter Target Workspace:** `C:\Users\Shaheer\Documents\GitHub\Sharqi-App`  
 **Backend Host:** `https://erp.alsharqiholding.qa`  
@@ -95,7 +95,7 @@ This report delivers a 100% code-level technical audit of the native Android app
 * **Navigation Path:** `LoginActivity` (upon status 101) → `AddMobileActivity`.
 * **Purpose:** Allow employees without a mobile on record in Odoo to register an 8-digit WhatsApp number.
 * **UI Structure:** Back button, logo, header "REGISTER NUMBER", subtitle "Please enter your Whatsapp number", 8-digit numeric input (`maxLength="8"`), "SAVE" button.
-* **Validation Logic:** Input cannot be empty; must be at least 8 digits.
+* **Validation Logic:** Input cannot be empty; must  be at least 8 digits.
 * **API Call:** Dispatches `POST attendance/add/whatsapp_number` with `params: { "employee_number": emp_id, "company_id": company_id, "whatsapp_number": "..." }`.
 * **Success Transition:** Extracts `register_mobile` from response and navigates to `VerifyActivity`.
 

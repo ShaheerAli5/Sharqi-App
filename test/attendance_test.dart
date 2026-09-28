@@ -1,9 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sharqi/core/services/location_service.dart';
-import 'package:sharqi/core/services/storage_service.dart';
-import 'package:sharqi/data/models/app_models.dart';
+import 'package:self_service_app/core/services/location_service.dart';
+import 'package:self_service_app/core/services/storage_service.dart';
+import 'package:self_service_app/core/services/work_location_asset_service.dart';
+import 'package:self_service_app/data/models/app_models.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('Odoo Models JSON-RPC Defensive Parsing Tests', () {
     test('CompanyItem & CompanyListResponse parsing', () {
       final json = {
@@ -24,10 +27,7 @@ void main() {
 
     test('SendOtpResponse parsing & getters', () {
       final json101 = {
-        'result': {
-          'status': '101',
-          'error': 'Mobile number is not registered'
-        }
+        'result': {'status': '101', 'error': 'Mobile number is not registered'}
       };
       final res101 = SendOtpResponse.fromJson(json101);
       expect(res101.isStatus101, true);
@@ -120,25 +120,132 @@ void main() {
       };
       final statusOut = TimeInOutStatus.fromJson(jsonOut);
       expect(statusOut.isTimeIn, false);
+
+      final statusWithLocation = TimeInOutStatus.fromJson({
+        'result': {
+          'success': true,
+          'is_time_in': true,
+          'last_time_in_datetime': '2026-09-23 08:15',
+          'time_in_id': 1054,
+          'check_in_location': {
+            'id': 15,
+            'name': 'Al Aziziya Hotel',
+            'latitude': 25.2501,
+            'longitude': 51.4412,
+            'allowed_radius': 75,
+          }
+        }
+      });
+      expect(statusWithLocation.checkInLocationName, 'Al Aziziya Hotel');
+      expect(statusWithLocation.checkInLocationId, 15);
+      expect(statusWithLocation.attendanceId, '1054');
+      expect(statusWithLocation.checkInLatitude, 25.2501);
+      expect(statusWithLocation.checkInLongitude, 51.4412);
+      expect(statusWithLocation.allowedRadiusMeters, 75);
     });
 
     test('TodayWorkLocation & WorkLocationItem parsing', () {
       final jsonToday = {
         'result': {
-          'area_id': {
-            'id': 14,
-            'name': 'Tower A - Construction Site'
-          }
+          'area_id': {'id': 14, 'name': 'Tower A - Construction Site'}
         }
       };
       final today = TodayWorkLocation.fromJson(jsonToday);
       expect(today.id, 14);
       expect(today.name, 'Tower A - Construction Site');
 
-      final item = WorkLocationItem.fromJson({'id': 14, 'name': 'Tower A', 'code': false});
+      final geoToday = TodayWorkLocation.fromJson({
+        'result': {
+          'area_id': {
+            'id': 15,
+            'name': 'Al Aziziya Hotel',
+            'lat': 25.2501,
+            'long': 51.4412,
+            'geofence_radius': 75,
+          }
+        }
+      });
+      expect(geoToday.latitude, 25.2501);
+      expect(geoToday.longitude, 51.4412);
+      expect(geoToday.allowedRadiusMeters, 75);
+
+      final item = WorkLocationItem.fromJson(
+          {'id': 14, 'name': 'Tower A', 'code': false});
       expect(item.id, 14);
       expect(item.name, 'Tower A');
       expect(item.code, false);
+    });
+
+    test('Check-in persistence stores identity but never coordinates', () {
+      const location = CheckInLocation(
+        employeeNumber: '10091',
+        companyId: '3',
+        date: '2026-09-23',
+        name: 'Al Aziziya Hotel',
+        workLocationId: 15,
+        attendanceId: '1054',
+        latitude: 25.2501,
+        longitude: 51.4412,
+        allowedRadiusMeters: 75,
+        coordinateSource: 'successful_check_in_gps',
+      );
+      final restored = CheckInLocation.fromJson(location.toJson());
+      expect(restored.name, 'Al Aziziya Hotel');
+      expect(restored.workLocationId, 15);
+      expect(restored.latitude, 0);
+      expect(restored.longitude, 0);
+      expect(restored.allowedRadiusMeters, isNull);
+      expect(location.toJson().containsKey('latitude'), false);
+      expect(location.toJson().containsKey('longitude'), false);
+    });
+
+    test('API geofence radius is used without a local fallback', () {
+      const backendGeofence = CheckInLocation(
+        employeeNumber: '10091',
+        companyId: '3',
+        date: '2026-09-23',
+        name: 'Office A',
+        latitude: 25.2501,
+        longitude: 51.4412,
+        allowedRadiusMeters: 75,
+        checkInAccuracyMeters: 8,
+      );
+      expect(backendGeofence.validationRadius(6), 75);
+    });
+
+    test('bundled Odoo location catalog loads valid coordinate records',
+        () async {
+      final service = WorkLocationAssetService();
+      final locations = await service.loadLocations();
+      final alAzzizya = await service.findLocation(locationId: 416);
+      final headOffice = await service.findLocation(locationId: 1197);
+
+      expect(locations.length, 151);
+      expect(alAzzizya, isNotNull);
+      expect(alAzzizya!.name, 'Al-Azzizya Hotel');
+      expect(alAzzizya.latitude, 25.2695064390565);
+      expect(alAzzizya.longitude, 51.4389834582647);
+      expect(headOffice, isNotNull);
+      expect(headOffice!.name, 'Head Office');
+      expect(headOffice.latitude, 25.388663682696095);
+      expect(headOffice.longitude, 51.5224497449326);
+      expect(
+        locations.any((location) => location.name == 'Office'),
+        isFalse,
+      );
+      expect(WorkLocationAssetService.fallbackRadiusMeters, 100);
+    });
+
+    test('Distance calculation uses geodesic meters, not coordinate equality',
+        () {
+      final nearby = LocationService.distanceInMeters(
+        startLatitude: 25.2501,
+        startLongitude: 51.4412,
+        endLatitude: 25.2502,
+        endLongitude: 51.4412,
+      );
+      expect(nearby, greaterThan(0));
+      expect(nearby, lessThan(75));
     });
 
     test('AttendanceItem overtime approval getter', () {

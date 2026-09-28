@@ -1,0 +1,908 @@
+[
+  {
+    "id": 416,
+    "name": "Al-Azzizya Hotel",
+    "latitude": 25.2695064390565,
+    "longitude": 51.4389834582647
+  },
+  {
+    "id": 419,
+    "name": "Banyan Tree Hotel",
+    "latitude": 25.2858211676303,
+    "longitude": 51.5171418030291
+  },
+  {
+    "id": 420,
+    "name": "Belhambar Restaurant",
+    "latitude": 25.2943565984402,
+    "longitude": 51.5345637128208
+  },
+  {
+    "id": 421,
+    "name": "Centara west Bay Hotel & Residences Doha",
+    "latitude": 25.3280345,
+    "longitude": 51.5365284
+  },
+  {
+    "id": 422,
+    "name": "Doha Clinic",
+    "latitude": 25.2738970823686,
+    "longitude": 51.5034072596011
+  },
+  {
+    "id": 423,
+    "name": "Doha oasis",
+    "latitude": 25.2853088572645,
+    "longitude": 51.5196342168897
+  },
+  {
+    "id": 425,
+    "name": "Embassy Suites by Hilton",
+    "latitude": 25.2837189365641,
+    "longitude": 51.5405213016883
+  },
+  {
+    "id": 428,
+    "name": "Kempinski residence and suits",
+    "latitude": 25.3288402778413,
+    "longitude": 51.5313238053948
+  },
+  {
+    "id": 429,
+    "name": "La Cigale Hotel",
+    "latitude": 25.2802146153655,
+    "longitude": 51.5078969817253
+  },
+  {
+    "id": 430,
+    "name": "Little Sailor Restaurant",
+    "latitude": 25.2751630594502,
+    "longitude": 51.5089925456682
+  },
+  {
+    "id": 432,
+    "name": "Millennium Hotel and resort - em sherif",
+    "latitude": 25.28333137657673,
+    "longitude": 51.495421567163554
+  },
+  {
+    "id": 433,
+    "name": "M Gallery hotel",
+    "latitude": 25.285070364811,
+    "longitude": 51.530029143024
+  },
+  {
+    "id": 435,
+    "name": "Orient Pearl",
+    "latitude": 25.2899618580143,
+    "longitude": 51.5485520588443
+  },
+  {
+    "id": 439,
+    "name": "Souq Al Wakra Hotel",
+    "latitude": 25.1738532735655,
+    "longitude": 51.6104595531665
+  },
+  {
+    "id": 440,
+    "name": "The Ned Doha",
+    "latitude": 25.2948293009025,
+    "longitude": 51.5222258475994
+  },
+  {
+    "id": 441,
+    "name": "The Plaza by Anantara",
+    "latitude": 25.2805897173801,
+    "longitude": 51.5514772432508
+  },
+  {
+    "id": 442,
+    "name": "The torch Hotel",
+    "latitude": 25.2622684,
+    "longitude": 51.4449777
+  },
+  {
+    "id": 446,
+    "name": "Shoumoukh Tower",
+    "latitude": 25.2811791034382,
+    "longitude": 51.5075636136073
+  },
+  {
+    "id": 449,
+    "name": "Al-Rayyan Hotel",
+    "latitude": 25.3245591802256,
+    "longitude": 51.351568044443
+  },
+  {
+    "id": 450,
+    "name": "Tawar Mall",
+    "latitude": 25.3368849945794,
+    "longitude": 51.4810272409771
+  },
+  {
+    "id": 451,
+    "name": "Mall Of Qatar",
+    "latitude": 25.3266315395709,
+    "longitude": 51.3501048967965
+  },
+  {
+    "id": 452,
+    "name": "Doha Festival City",
+    "latitude": 25.3863363525608,
+    "longitude": 51.4433731096776
+  },
+  {
+    "id": 453,
+    "name": "Porto Arabia - UDC",
+    "latitude": 25.36926908887972,
+    "longitude": 51.54432532840765
+  },
+  {
+    "id": 454,
+    "name": "Novo Cinema",
+    "latitude": 25.36667703774208,
+    "longitude": 51.55042741182933
+  },
+  {
+    "id": 457,
+    "name": "Wyndham Hotel West Bay",
+    "latitude": 25.3222742676072,
+    "longitude": 51.525460392961
+  },
+  {
+    "id": 459,
+    "name": "Marsa Malaz Kempinski",
+    "latitude": 25.3760075057008,
+    "longitude": 51.5484821788005
+  },
+  {
+    "id": 461,
+    "name": "Old Doha Port",
+    "latitude": 25.2987981018971,
+    "longitude": 51.5526642729863
+  },
+  {
+    "id": 464,
+    "name": "Madina Central",
+    "latitude": 25.36832324829813,
+    "longitude": 51.550729047418585
+  },
+  {
+    "id": 465,
+    "name": "UDC Tower",
+    "latitude": 25.3715620009822,
+    "longitude": 51.5331850748658
+  },
+  {
+    "id": 466,
+    "name": "Al Maha Island",
+    "latitude": 25.3997696320508,
+    "longitude": 51.5273319251562
+  },
+  {
+    "id": 471,
+    "name": "City Center",
+    "latitude": 25.32604325658,
+    "longitude": 51.5300067237802
+  },
+  {
+    "id": 474,
+    "name": "Century Marina Mall",
+    "latitude": 25.398727961651,
+    "longitude": 51.5201348148054
+  },
+  {
+    "id": 475,
+    "name": "Al Fardan Premier Motors",
+    "latitude": 25.3918592,
+    "longitude": 51.5152224
+  },
+  {
+    "id": 477,
+    "name": "Raffels Hotel",
+    "latitude": 25.3877259196071,
+    "longitude": 51.5312497503873
+  },
+  {
+    "id": 478,
+    "name": "St Regis Doha",
+    "latitude": 25.3505618582066,
+    "longitude": 51.5300802885916
+  },
+  {
+    "id": 479,
+    "name": "Fairmont Hotel",
+    "latitude": 25.3877259196071,
+    "longitude": 51.5312497503873
+  },
+  {
+    "id": 481,
+    "name": "Twin Tower Lusail",
+    "latitude": 25.386593366895,
+    "longitude": 51.5236296343892
+  },
+  {
+    "id": 482,
+    "name": "Manarat Lusail Tower",
+    "latitude": 25.3867051388227,
+    "longitude": 51.5268914339658
+  },
+  {
+    "id": 486,
+    "name": "Intercontinental Doha",
+    "latitude": 25.3489263281441,
+    "longitude": 51.5292711290889
+  },
+  {
+    "id": 488,
+    "name": "The View Hospital",
+    "latitude": 25.3680758173131,
+    "longitude": 51.5256459360616
+  },
+  {
+    "id": 489,
+    "name": "Voco Hotel",
+    "latitude": 25.3253069556708,
+    "longitude": 51.522197404396
+  },
+  {
+    "id": 490,
+    "name": "Lagoona Mall",
+    "latitude": 25.3761284355263,
+    "longitude": 51.5254718586199
+  },
+  {
+    "id": 491,
+    "name": "Katara hills",
+    "latitude": 25.3532344462639,
+    "longitude": 51.5243843124185
+  },
+  {
+    "id": 632,
+    "name": "St regis Marsa Arabia",
+    "latitude": 25.3695450786935,
+    "longitude": 51.543630823782
+  },
+  {
+    "id": 633,
+    "name": "Hilton the pearl residence",
+    "latitude": 25.3745939088026,
+    "longitude": 51.5394367549249
+  },
+  {
+    "id": 634,
+    "name": "The chedi katara Hotel",
+    "latitude": 25.3627876484555,
+    "longitude": 51.5285106393531
+  },
+  {
+    "id": 639,
+    "name": "senoRitas Tex Mex",
+    "latitude": 25.4012856,
+    "longitude": 51.5128392
+  },
+  {
+    "id": 640,
+    "name": "QQ",
+    "latitude": 25.3751601383437,
+    "longitude": 51.5448451072533
+  },
+  {
+    "id": 642,
+    "name": "Ibis and Adagio",
+    "latitude": 25.2701326566325,
+    "longitude": 51.5140268775774
+  },
+  {
+    "id": 645,
+    "name": "Adrenaline Gym",
+    "latitude": 25.3960330662731,
+    "longitude": 51.5210527916502
+  },
+  {
+    "id": 649,
+    "name": "Best Plaza West Bay Hotel",
+    "latitude": 25.3280251,
+    "longitude": 51.5330558
+  },
+  {
+    "id": 650,
+    "name": "Four Season The Pearl Qatar",
+    "latitude": 25.3626051,
+    "longitude": 51.5431965
+  },
+  {
+    "id": 651,
+    "name": "Park Hyatt Doha",
+    "latitude": 25.2842100987309,
+    "longitude": 51.5277882040809
+  },
+  {
+    "id": 743,
+    "name": "Dar Global",
+    "latitude": 25.4062962862817,
+    "longitude": 51.523603749749
+  },
+  {
+    "id": 752,
+    "name": "Mandarin Oriental Doha",
+    "latitude": 25.2859954175369,
+    "longitude": 51.5257996611383
+  },
+  {
+    "id": 753,
+    "name": "Villaggio Mall",
+    "latitude": 25.2592506561457,
+    "longitude": 51.4438169716623
+  },
+  {
+    "id": 765,
+    "name": "21 High Street Hotel",
+    "latitude": 25.3607466901227,
+    "longitude": 51.5228735065877
+  },
+  {
+    "id": 773,
+    "name": "Maysan LXR",
+    "latitude": 25.2646174331274,
+    "longitude": 51.4330264038591
+  },
+  {
+    "id": 776,
+    "name": "Messila Resort",
+    "latitude": 25.3029816061378,
+    "longitude": 51.4768058125152
+  },
+  {
+    "id": 777,
+    "name": "Sharq Village",
+    "latitude": 25.2850769970932,
+    "longitude": 51.5567579517634
+  },
+  {
+    "id": 779,
+    "name": "Ritz Carlton hotel",
+    "latitude": 25.3789811448875,
+    "longitude": 51.5317378619312
+  },
+  {
+    "id": 781,
+    "name": "West Walk",
+    "latitude": 25.25123565078,
+    "longitude": 51.4700322544654
+  },
+  {
+    "id": 884,
+    "name": "Cielo Hotel",
+    "latitude": 25.4017718057885,
+    "longitude": 51.5130025996686
+  },
+  {
+    "id": 885,
+    "name": "Korean Medical Center",
+    "latitude": 25.414078945043,
+    "longitude": 51.4933560455151
+  },
+  {
+    "id": 888,
+    "name": "Dusit Hotel",
+    "latitude": 25.3279212082349,
+    "longitude": 51.5319658019496
+  },
+  {
+    "id": 892,
+    "name": "Lusail University",
+    "latitude": 25.4022418,
+    "longitude": 51.5129121
+  },
+  {
+    "id": 893,
+    "name": "SAPPHIRE PLAZA HOTEL",
+    "latitude": 25.289203,
+    "longitude": 51.5106917
+  },
+  {
+    "id": 894,
+    "name": "General Authority of Customs",
+    "latitude": 25.3168288,
+    "longitude": 51.5214898
+  },
+  {
+    "id": 895,
+    "name": "Al Khaiern Hotel",
+    "latitude": 25.2877731,
+    "longitude": 51.4977881
+  },
+  {
+    "id": 896,
+    "name": "Saraya Corniche Hotel",
+    "latitude": 25.2900221,
+    "longitude": 51.5426384
+  },
+  {
+    "id": 897,
+    "name": "Doc Medical Center - al Sadd",
+    "latitude": 25.2779234,
+    "longitude": 51.5053174
+  },
+  {
+    "id": 922,
+    "name": "Doc Medical Center - lusail",
+    "latitude": 25.3843344,
+    "longitude": 51.5248557
+  },
+  {
+    "id": 923,
+    "name": "Alfardan Properties - Plaza",
+    "latitude": 25.2853653,
+    "longitude": 51.5349126
+  },
+  {
+    "id": 924,
+    "name": "SIDRA HOSPITAL",
+    "latitude": 25.3221751,
+    "longitude": 51.1566524
+  },
+  {
+    "id": 925,
+    "name": "TOWER 50",
+    "latitude": 29.3760957,
+    "longitude": 47.9883842
+  },
+  {
+    "id": 926,
+    "name": "Tornado Company W.L.L",
+    "latitude": 25.3193029,
+    "longitude": 51.5254109
+  },
+  {
+    "id": 927,
+    "name": "Double Tree by Hilton, Doha",
+    "latitude": 25.2761909,
+    "longitude": 51.2097619
+  },
+  {
+    "id": 928,
+    "name": "Dusit D2",
+    "latitude": 25.2732799,
+    "longitude": 51.5156181
+  },
+  {
+    "id": 929,
+    "name": "United FM Service",
+    "latitude": 25.3829999,
+    "longitude": 51.5225083
+  },
+  {
+    "id": 930,
+    "name": "Alfardan Properties",
+    "latitude": 25.2853653,
+    "longitude": 51.5349126
+  },
+  {
+    "id": 931,
+    "name": "UFC Gym",
+    "latitude": 25.3917688,
+    "longitude": 51.3710108
+  },
+  {
+    "id": 932,
+    "name": "Aleph by Hilton, Doha",
+    "latitude": 25.3270977,
+    "longitude": 51.5351903
+  },
+  {
+    "id": 933,
+    "name": "Jimmy's Killer Prawns Restaurant",
+    "latitude": 25.2706916,
+    "longitude": 51.5133437
+  },
+  {
+    "id": 934,
+    "name": "Central Inn Souq Waqif Hotel",
+    "latitude": 25.2841427,
+    "longitude": 51.5372115
+  },
+  {
+    "id": 935,
+    "name": "Dr. Aida Clinic Center",
+    "latitude": 25.3081343,
+    "longitude": 51.4872767
+  },
+  {
+    "id": 936,
+    "name": "Gulf Laboratory and Radiology",
+    "latitude": 25.2775534,
+    "longitude": 51.5020199
+  },
+  {
+    "id": 937,
+    "name": "Tower 18",
+    "latitude": 25.3918592,
+    "longitude": 51.5152224
+  },
+  {
+    "id": 938,
+    "name": "Al Mahmoud Medical Center",
+    "latitude": 25.3539403,
+    "longitude": 51.4284057
+  },
+  {
+    "id": 939,
+    "name": "Aman Hospital",
+    "latitude": 25.2321472,
+    "longitude": 51.5747816
+  },
+  {
+    "id": 940,
+    "name": "Central inn Al Sadd",
+    "latitude": 25.2848288,
+    "longitude": 51.4990669
+  },
+  {
+    "id": 941,
+    "name": "Alfardan Properties - Center",
+    "latitude": 25.3204551,
+    "longitude": 51.3847974
+  },
+  {
+    "id": 942,
+    "name": "Al Jazeera Group",
+    "latitude": 25.2776926,
+    "longitude": 51.4926011
+  },
+  {
+    "id": 943,
+    "name": "CENTURY MARINA HOTEL",
+    "latitude": 25.3983446,
+    "longitude": 51.5198918
+  },
+  {
+    "id": 944,
+    "name": "SAPPHIRE PlLAZA HOTEL",
+    "latitude": 25.289203,
+    "longitude": 51.5106917
+  },
+  {
+    "id": 945,
+    "name": "Aleph Residence",
+    "latitude": 25.3270977,
+    "longitude": 51.5351903
+  },
+  {
+    "id": 948,
+    "name": "Ooredoo",
+    "latitude": 25.2665363258125,
+    "longitude": 51.5534626619535
+  },
+  {
+    "id": 1018,
+    "name": "Msheireb Downtown",
+    "latitude": 25.286306509182662,
+    "longitude": 51.52709035140846
+  },
+  {
+    "id": 1071,
+    "name": "Carrefour City center",
+    "latitude": 25.3247768,
+    "longitude": 51.5293744
+  },
+  {
+    "id": 1072,
+    "name": "carrefour Dar Al Salam",
+    "latitude": 25.2473832,
+    "longitude": 51.4900813
+  },
+  {
+    "id": 1073,
+    "name": "Carrefour Wakra",
+    "latitude": 25.1711097,
+    "longitude": 51.5895743
+  },
+  {
+    "id": 1075,
+    "name": "Four seasons",
+    "latitude": 25.3918377,
+    "longitude": 51.4534205
+  },
+  {
+    "id": 1076,
+    "name": "DREAMA MAMURA",
+    "latitude": 25.2574726,
+    "longitude": 51.4901533
+  },
+  {
+    "id": 1077,
+    "name": "Dreama Al Kheesa",
+    "latitude": 25.2574726,
+    "longitude": 51.4901533
+  },
+  {
+    "id": 1078,
+    "name": "Red moon",
+    "latitude": 25.2084782,
+    "longitude": 51.2149961
+  },
+  {
+    "id": 1079,
+    "name": "Rays & Jerk",
+    "latitude": 25.3076024,
+    "longitude": 51.497065
+  },
+  {
+    "id": 1080,
+    "name": "Tawar Mall Horses",
+    "latitude": 25.3366329,
+    "longitude": 51.4808985
+  },
+  {
+    "id": 1081,
+    "name": "Talal Abu Gazala",
+    "latitude": 25.2737112,
+    "longitude": 51.5386071
+  },
+  {
+    "id": 1086,
+    "name": "Alfardan Premier Motors LLC",
+    "latitude": 25.387592,
+    "longitude": 51.4854001
+  },
+  {
+    "id": 1087,
+    "name": "QNCC",
+    "latitude": 25.3219654,
+    "longitude": 51.4372725
+  },
+  {
+    "id": 1120,
+    "name": "Sultan event",
+    "latitude": 52.4844856,
+    "longitude": 13.4626319
+  },
+  {
+    "id": 1121,
+    "name": "Gewan Island",
+    "latitude": 25.37891372111439,
+    "longitude": 51.53888279568188
+  },
+  {
+    "id": 1123,
+    "name": "Training- Dusit D2",
+    "latitude": 25.2732799,
+    "longitude": 51.3714225
+  },
+  {
+    "id": 1124,
+    "name": "AL ARABI LABORATORY AND RADIOLOGY",
+    "latitude": 25.3071471,
+    "longitude": 51.4868251
+  },
+  {
+    "id": 1125,
+    "name": "Main Office - Alsharqi",
+    "latitude": 25.3885531,
+    "longitude": 51.5202472
+  },
+  {
+    "id": 1127,
+    "name": "Al Waha For Cars",
+    "latitude": 25.282371,
+    "longitude": 51.5442881
+  },
+  {
+    "id": 1129,
+    "name": "Ain Khaled Event",
+    "latitude": 25.230714,
+    "longitude": 51.4178967
+  },
+  {
+    "id": 1149,
+    "name": "Event Umm Slal",
+    "latitude": 25.3930665,
+    "longitude": 51.380979
+  },
+  {
+    "id": 1154,
+    "name": "GOLF CLUB EDUCATION",
+    "latitude": 25.3052176,
+    "longitude": 51.4196272
+  },
+  {
+    "id": 1155,
+    "name": "VILLAGE BADARO",
+    "latitude": 25.3650608,
+    "longitude": 51.5398221
+  },
+  {
+    "id": 1156,
+    "name": "Al Najada Hotel",
+    "latitude": 25.2848459848071,
+    "longitude": 51.5332916596107
+  },
+  {
+    "id": 1161,
+    "name": "Shaza Doha",
+    "latitude": 25.2856561,
+    "longitude": 51.5416928
+  },
+  {
+    "id": 1163,
+    "name": "LOGISTIC",
+    "latitude": 25.1963762,
+    "longitude": 51.2941493
+  },
+  {
+    "id": 1164,
+    "name": "Shaza Doha",
+    "latitude": 25.2869657,
+    "longitude": 51.5404268
+  },
+  {
+    "id": 1165,
+    "name": "Pullman Hotel",
+    "latitude": 25.3240351269988,
+    "longitude": 51.5264034107397
+  },
+  {
+    "id": 1166,
+    "name": "THE VILLAGE BADARO",
+    "latitude": 25.3692306,
+    "longitude": 51.5459863
+  },
+  {
+    "id": 1168,
+    "name": "Ezdan Palace",
+    "latitude": 25.337441558563,
+    "longitude": 51.4621682376763
+  },
+  {
+    "id": 1170,
+    "name": "Rosewood Hotel",
+    "latitude": 25.383851977672,
+    "longitude": 51.5314040039668
+  },
+  {
+    "id": 1173,
+    "name": "Andaz Doha Hotel",
+    "latitude": 25.3245853595658,
+    "longitude": 51.537213502231
+  },
+  {
+    "id": 1188,
+    "name": "Waldorf Astoria",
+    "latitude": 25.4087919066645,
+    "longitude": 51.5200189463992
+  },
+  {
+    "id": 1190,
+    "name": "CAC TUS - Lusail",
+    "latitude": 25.4063109700321,
+    "longitude": 51.523359607377
+  },
+  {
+    "id": 1193,
+    "name": "121 Tower",
+    "latitude": 25.3724840659029,
+    "longitude": 51.5335170979544
+  },
+  {
+    "id": 1197,
+    "name": "Head Office",
+    "latitude": 25.388663682696095,
+    "longitude": 51.5224497449326
+  },
+  {
+    "id": 1198,
+    "name": "The Pearl Hospital",
+    "latitude": 25.3704652342094,
+    "longitude": 51.5521482146353
+  },
+  {
+    "id": 1199,
+    "name": "Surgi Art Hospital",
+    "latitude": 25.4027339550553,
+    "longitude": 51.5182025197203
+  },
+  {
+    "id": 1203,
+    "name": "Ministry Of Foreign Affairs (MOFA)",
+    "latitude": 25.3437122391086,
+    "longitude": 51.5193029875993
+  },
+  {
+    "id": 1204,
+    "name": "Head Office Hiwash",
+    "latitude": 25.39,
+    "longitude": 51.52
+  },
+  {
+    "id": 1205,
+    "name": "Centro Mall",
+    "latitude": 25.4244697106673,
+    "longitude": 51.4819955669803
+  },
+  {
+    "id": 1206,
+    "name": "Joe & The Juice",
+    "latitude": 25.3932019029657,
+    "longitude": 51.5259715325272
+  },
+  {
+    "id": 1210,
+    "name": "Aqua-Tots Qatar",
+    "latitude": 25.244388,
+    "longitude": 51.4846009
+  },
+  {
+    "id": 1211,
+    "name": "NAILS AL ATHAFER SALON",
+    "latitude": 25.234907,
+    "longitude": 51.501766
+  },
+  {
+    "id": 1212,
+    "name": "Katara Village",
+    "latitude": 25.3610946645921,
+    "longitude": 51.5231752005026
+  },
+  {
+    "id": 1213,
+    "name": "IEC Warehouse - Barket Al Awamer",
+    "latitude": 25.07283,
+    "longitude": 51.48887
+  },
+  {
+    "id": 1214,
+    "name": "35 West Bay Tower",
+    "latitude": 25.3237894879146,
+    "longitude": 51.525446453614
+  },
+  {
+    "id": 1219,
+    "name": "Al Mafraa restaurant",
+    "latitude": 25.2726328,
+    "longitude": 51.5073824
+  },
+  {
+    "id": 1290,
+    "name": "Al Ahli Hospital",
+    "latitude": 25.3075994332294,
+    "longitude": 51.4996673398989
+  },
+  {
+    "id": 1292,
+    "name": "Banana Island",
+    "latitude": 25.2921715156398,
+    "longitude": 51.5343576274463
+  },
+  {
+    "id": 1299,
+    "name": "Laffan Tower",
+    "latitude": 25.3291174542817,
+    "longitude": 51.5261339578579
+  },
+  {
+    "id": 1301,
+    "name": "ALWAAB MEDICAL CENTER",
+    "latitude": 25.26996844048418,
+    "longitude": 51.475624426342854
+  },
+  {
+    "id": 1303,
+    "name": "Nurai Island",
+    "latitude": 24.5498164,
+    "longitude": 54.4559944
+  },
+  {
+    "id": 1307,
+    "name": "CCTV",
+    "latitude": 25.388593,
+    "longitude": 51.522785
+  },
+  {
+    "id": 1310,
+    "name": "Beiruti Restaurant",
+    "latitude": 25.388297,
+    "longitude": 51.531819
+  }
+]

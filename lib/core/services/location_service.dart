@@ -8,6 +8,7 @@ class LocationResult {
   final double longitude;
   final String geoLocationString;
   final String? address;
+  final double? accuracyMeters;
   final bool isSuccess;
   final String? errorMessage;
 
@@ -16,6 +17,7 @@ class LocationResult {
     required this.longitude,
     required this.geoLocationString,
     this.address,
+    this.accuracyMeters,
     this.isSuccess = true,
     this.errorMessage,
   });
@@ -33,6 +35,19 @@ class LocationResult {
 }
 
 class LocationService {
+  static double distanceInMeters({
+    required double startLatitude,
+    required double startLongitude,
+    required double endLatitude,
+    required double endLongitude,
+  }) =>
+      Geolocator.distanceBetween(
+        startLatitude,
+        startLongitude,
+        endLatitude,
+        endLongitude,
+      );
+
   static Future<LocationResult> getCurrentLocation() async {
     try {
       bool serviceEnabled = false;
@@ -96,6 +111,7 @@ class LocationService {
         longitude: long,
         geoLocationString: '$lat,$long',
         address: address,
+        accuracyMeters: position.accuracy > 0 ? position.accuracy : null,
         isSuccess: true,
       );
     } catch (e) {
@@ -167,7 +183,7 @@ class LocationService {
         },
         options: Options(
           headers: {
-            'User-Agent': 'SharqiApp/1.0',
+            'User-Agent': 'SelfService/1.0',
             'Accept-Language': 'en',
           },
           receiveTimeout: const Duration(seconds: 4),

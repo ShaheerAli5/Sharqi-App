@@ -10,6 +10,7 @@ import '../features/attendance/presentation/screens/record_time_out_screen.dart'
 import '../features/attendance/presentation/screens/attendance_list_screen.dart';
 import '../features/attendance/presentation/screens/work_plan_screen.dart';
 import '../features/notifications/presentation/screens/notifications_screen.dart';
+import '../core/services/storage_service.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -34,7 +35,9 @@ class AppRoutes {
   static const String notifications = '/notifications';
 
   static Map<String, WidgetBuilder> get routes => {
-        splash: (context) => const SplashScreen(),
+        splash: (context) => StorageService.hasActiveSession()
+            ? const HomeScreen()
+            : const SplashScreen(),
         signIn: (context) => const SignInScreen(),
         verification: (context) => const VerificationScreen(),
         home: (context) => const HomeScreen(),

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/attendance_repository.dart';
 import '../../../../core/services/location_service.dart';
@@ -54,7 +55,8 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('No previous TIME IN was recorded today. Please check in first.'),
+              content: Text(
+                  'No previous TIME IN was recorded today. Please check in first.'),
               backgroundColor: AppColors.primary,
             ),
           );
@@ -139,7 +141,8 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
     if (rawTime != null && rawTime.trim().isNotEmpty) {
       final trimmed = rawTime.trim();
 
-      if (trimmed.toUpperCase().contains('AM') || trimmed.toUpperCase().contains('PM')) {
+      if (trimmed.toUpperCase().contains('AM') ||
+          trimmed.toUpperCase().contains('PM')) {
         return trimmed;
       }
 
@@ -149,7 +152,8 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
       }
 
       final spaceSplit = trimmed.split(' ');
-      final timeStr = spaceSplit.length > 1 ? spaceSplit.last : spaceSplit.first;
+      final timeStr =
+          spaceSplit.length > 1 ? spaceSplit.last : spaceSplit.first;
       final timeParts = timeStr.split(':');
       if (timeParts.length >= 2) {
         final hour = int.tryParse(timeParts[0]);
@@ -218,7 +222,8 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
     if (_isNotCheckedIn) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No previous TIME IN was recorded. Please check in first.'),
+          content:
+              Text('No previous TIME IN was recorded. Please check in first.'),
           backgroundColor: AppColors.primary,
         ),
       );
@@ -249,6 +254,70 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
     } else {
       _detectedLocationName =
           '${locationResult.latitude.toStringAsFixed(6)}, ${locationResult.longitude.toStringAsFixed(6)}';
+    }
+
+    CheckInLocation? checkInLocation;
+    try {
+      checkInLocation = await _loadCheckInLocation();
+    } on AttendanceRequestException catch (error) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      await _showCheckoutLocationAlert(
+        title: 'Location coordinates unavailable',
+        message: error.message,
+      );
+      return;
+    }
+    if (!mounted) return;
+    if (checkInLocation == null || !checkInLocation.hasValidCoordinates) {
+      setState(() => _isSubmitting = false);
+      await _showCheckoutLocationAlert(
+        title: 'Check-in location unavailable',
+        message:
+            'We could not verify your check-in location. Please refresh your attendance data and try again.',
+      );
+      return;
+    }
+
+    final distanceMeters = LocationService.distanceInMeters(
+      startLatitude: checkInLocation.latitude,
+      startLongitude: checkInLocation.longitude,
+      endLatitude: locationResult.latitude,
+      endLongitude: locationResult.longitude,
+    );
+    final validationRadius = checkInLocation.allowedRadiusMeters;
+    if (kDebugMode) {
+      debugPrint('Check-in latitude: ${checkInLocation.latitude}');
+      debugPrint('Check-in longitude: ${checkInLocation.longitude}');
+      debugPrint('Current latitude: ${locationResult.latitude}');
+      debugPrint('Current longitude: ${locationResult.longitude}');
+      debugPrint('Allowed radius: $validationRadius');
+      debugPrint('Calculated distance: $distanceMeters');
+      debugPrint(
+        'Location validation result: ${validationRadius != null && distanceMeters <= validationRadius ? 'INSIDE' : 'OUTSIDE'}',
+      );
+    }
+    if (validationRadius == null) {
+      setState(() => _isSubmitting = false);
+      await _showCheckoutLocationAlert(
+        title: 'Location coordinates unavailable',
+        message:
+            'Location coordinates are not configured for this work location. Please contact the administrator.',
+      );
+      return;
+    }
+    if (distanceMeters > validationRadius) {
+      setState(() => _isSubmitting = false);
+      final locationName = checkInLocation.name.trim().isEmpty
+          ? 'your check-in location'
+          : checkInLocation.name.trim();
+      await _showCheckoutLocationAlert(
+        title: 'Return to your check-in location',
+        locationName: locationName,
+        message:
+            'You cannot check out because you are not at your check-in location ($locationName). Please return to your check-in location and try again.',
+      );
+      return;
     }
 
     // 2. Evaluate 2-Hour Early Checkout Rule
@@ -313,6 +382,7 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
         "time_out": timeOutStr,
         "lat": locationResult.latitude,
         "long": locationResult.longitude,
+        "accuracy": locationResult.accuracyMeters,
         "note": reason,
       });
 
@@ -346,6 +416,11 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
           _checkOutTimeDisplay = checkOutTimeFormatted;
         });
 
+        await StorageService.removeValue(
+          StorageService.keyActiveCheckInLocation,
+        );
+        if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('You are checked out at $checkOutTimeFormatted.'),
@@ -369,6 +444,145 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
     }
   }
 
+  Future<void> _showCheckoutLocationAlert({
+    required String title,
+    required String message,
+    String? locationName,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        contentPadding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+        title: Column(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFFE8EF),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.location_off_rounded,
+                color: AppColors.primary,
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1A1310),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (locationName != null) ...[
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFBF6F3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE8DFE1)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.location_on_rounded,
+                      color: AppColors.primary,
+                      size: 21,
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'YOUR CHECK-IN LOCATION',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.7,
+                              color: Color(0xFF8A7771),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            locationName,
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1A1310),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 14,
+                height: 1.45,
+                color: Color(0xFF685C59),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Got it',
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<CheckInLocation?> _loadCheckInLocation() async {
+    return _attendanceRepository.getActiveCheckInLocationForCheckout();
+  }
+
   Future<String?> _showEarlyCheckoutDialog() async {
     final TextEditingController reasonController = TextEditingController();
     return showDialog<String>(
@@ -376,7 +590,8 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
       barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text(
             'Early Checkout Justification',
             style: TextStyle(
@@ -458,8 +673,18 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
 
   String _formatDate(DateTime dt) {
     final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     return '${dt.day} ${months[dt.month - 1]}, ${dt.year}';
   }
@@ -564,8 +789,7 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            if (StorageService.getValue(
-                                    StorageService.keyPhone)
+                            if (StorageService.getValue(StorageService.keyPhone)
                                 .isNotEmpty) ...[
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -600,8 +824,7 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                               ),
                               const SizedBox(width: 8),
                             ],
-                            if (StorageService.getValue(
-                                    StorageService.keyEmpNo)
+                            if (StorageService.getValue(StorageService.keyEmpNo)
                                 .isNotEmpty)
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -703,8 +926,7 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                           Container(
                             height: 44,
                             width: double.infinity,
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
                               color: const Color(0xFFFBF6F3),
                               borderRadius: BorderRadius.circular(12),
@@ -739,8 +961,7 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                           Container(
                             height: 44,
                             width: double.infinity,
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
                               color: const Color(0xFFFBF6F3),
                               borderRadius: BorderRadius.circular(12),
@@ -773,8 +994,7 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                           Container(
                             height: 44,
                             width: double.infinity,
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
                               color: const Color(0xFFFBF6F3),
                               borderRadius: BorderRadius.circular(12),
@@ -792,7 +1012,8 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                                 ),
                                 const SizedBox(width: 12),
                                 Text(
-                                  (_isAlreadyTimeOut && _checkOutTimeDisplay != null)
+                                  (_isAlreadyTimeOut &&
+                                          _checkOutTimeDisplay != null)
                                       ? _checkOutTimeDisplay!
                                       : _formatTime(_now),
                                   style: const TextStyle(
@@ -861,7 +1082,9 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                           width: double.infinity,
                           height: 48,
                           child: ElevatedButton(
-                            onPressed: (_isSubmitting || _isNotCheckedIn || _isAlreadyTimeOut)
+                            onPressed: (_isSubmitting ||
+                                    _isNotCheckedIn ||
+                                    _isAlreadyTimeOut)
                                 ? null
                                 : _onTimeOut,
                             style: ElevatedButton.styleFrom(
@@ -889,7 +1112,9 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
-                                        _isAlreadyTimeOut ? 'Checked Out' : 'Time Out',
+                                        _isAlreadyTimeOut
+                                            ? 'Checked Out'
+                                            : 'Time Out',
                                         textAlign: TextAlign.center,
                                         maxLines: 1,
                                         softWrap: false,

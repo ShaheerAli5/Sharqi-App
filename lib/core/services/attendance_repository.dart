@@ -5,7 +5,9 @@ import '../../data/models/app_models.dart';
 import '../../data/models/portal_service_item.dart';
 import '../constants/app_strings.dart';
 import 'api_service.dart';
+import 'location_service.dart';
 import 'storage_service.dart';
+import 'work_location_asset_service.dart';
 
 class AttendanceRequestException implements Exception {
   final String message;
@@ -28,9 +30,14 @@ class NoPlanForTodayException extends AttendanceRequestException {
 
 class AttendanceRepository {
   final ApiService _apiService;
+  final WorkLocationAssetService _workLocationAssetService;
 
-  AttendanceRepository({ApiService? apiService})
-      : _apiService = apiService ?? ApiService();
+  AttendanceRepository({
+    ApiService? apiService,
+    WorkLocationAssetService? workLocationAssetService,
+  })  : _apiService = apiService ?? ApiService(),
+        _workLocationAssetService =
+            workLocationAssetService ?? WorkLocationAssetService();
 
   Map<String, dynamic> _attendanceSession() {
     final employeeNumber =
@@ -284,6 +291,9 @@ class AttendanceRepository {
           );
         }
         final result = _resultMap(response.data, "today's work plan");
+        if (kDebugMode) {
+          debugPrint('Today work-location response: $result');
+        }
         if (result.containsKey('error')) {
           _throwResultError(result, allowNoPlan: true);
         }
@@ -342,6 +352,9 @@ class AttendanceRepository {
           );
         }
         final result = _resultMap(response.data, 'attendance status');
+        if (kDebugMode) {
+          debugPrint('Active attendance response: $result');
+        }
         if (result.containsKey('error')) _throwResultError(result);
         if (!result.containsKey('success')) {
           throw const AttendanceRequestException(
@@ -411,7 +424,14 @@ class AttendanceRepository {
         ? (extraParams['long'] as num).toDouble()
         : 0.0;
     final note = extraParams['note']?.toString() ?? '';
+    final checkIn = await getActiveCheckInLocationForCheckout();
+    _validateCheckoutLocation(
+      checkIn: checkIn,
+      latitude: lat,
+      longitude: long,
+    );
 
+    if (kDebugMode) debugPrint('Calling checkout API');
     final response = await _apiService.recordTimeOut(
       employeeNumber: empNo,
       companyId: companyId,
@@ -434,6 +454,214 @@ class AttendanceRepository {
       }
     }
     return {'error': 'Failed to record Time Out'};
+  }
+
+  Future<CheckInLocation> getActiveCheckInLocationForCheckout() async {
+    final employeeNumber =
+        StorageService.getValue(StorageService.keyEmpNo).trim();
+    final companyId =
+        StorageService.getValue(StorageService.keyCompanyId).trim();
+    final status = await getTodaysTimeInOut();
+    if (!status.isTimeIn) {
+      throw const AttendanceRequestException(
+        'No active check-in record was found. Check-out was not submitted.',
+      );
+    }
+
+    if (status.checkInLatitude != null &&
+        status.checkInLongitude != null &&
+        status.allowedRadiusMeters != null) {
+      return CheckInLocation(
+        employeeNumber: employeeNumber,
+        companyId: companyId,
+        date: '',
+        name: status.checkInLocationName,
+        workLocationId: status.checkInLocationId,
+        attendanceId: status.attendanceId,
+        latitude: status.checkInLatitude!,
+        longitude: status.checkInLongitude!,
+        allowedRadiusMeters: status.allowedRadiusMeters,
+        coordinateSource: 'backend_attendance',
+      );
+    }
+
+    final stored = StorageService.getObject<CheckInLocation>(
+      StorageService.keyActiveCheckInLocation,
+      CheckInLocation.fromJson,
+    );
+    final storedIdentityMatchesActiveRecord = stored != null &&
+        stored.employeeNumber.trim() == employeeNumber &&
+        stored.companyId.trim() == companyId &&
+        (status.attendanceId == null ||
+            stored.attendanceId == status.attendanceId) &&
+        (status.checkInLocationId == null ||
+            stored.workLocationId == status.checkInLocationId);
+    final expectedLocationId = status.checkInLocationId ??
+        (storedIdentityMatchesActiveRecord ? stored.workLocationId : null);
+    final expectedLocationName = status.checkInLocationName.trim().isNotEmpty
+        ? status.checkInLocationName.trim()
+        : storedIdentityMatchesActiveRecord
+            ? stored.name.trim()
+            : '';
+    if (expectedLocationId == null && expectedLocationName.isEmpty) {
+      throw const AttendanceRequestException(
+        'Your active check-in location could not be verified. Check-out was not submitted.',
+      );
+    }
+
+    final workLocation = await getWorkLocationFromApi(
+      locationId: expectedLocationId,
+      locationName: expectedLocationName,
+    );
+    _requireWorkLocationGeofence(workLocation);
+    return CheckInLocation(
+      employeeNumber: employeeNumber,
+      companyId: companyId,
+      date: stored?.date ?? '',
+      name: workLocation.name,
+      workLocationId: workLocation.id,
+      attendanceId: status.attendanceId,
+      latitude: workLocation.latitude!,
+      longitude: workLocation.longitude!,
+      allowedRadiusMeters: workLocation.allowedRadiusMeters,
+      coordinateSource: 'work_location_catalog',
+    );
+  }
+
+  Future<WorkLocationItem> getWorkLocationFromApi({
+    int? locationId,
+    String locationName = '',
+  }) async {
+    TodayWorkLocation? todayLocation;
+    try {
+      final today = await getTodayWorkLocation();
+      final idMatches = locationId != null && today.id == locationId;
+      final nameMatches = locationName.trim().isNotEmpty &&
+          today.name.trim().toLowerCase() == locationName.trim().toLowerCase();
+      if (idMatches || nameMatches) todayLocation = today;
+    } on AttendanceRequestException {
+      // Continue with the full Odoo location endpoint.
+    }
+
+    List<WorkLocationItem> locations = const [];
+    try {
+      locations = await getWorkLocationList();
+    } on AttendanceRequestException {
+      // The bundled Odoo export can still supply coordinates when the list API
+      // is temporarily unavailable. The active plan/status remains the source
+      // of the employee's assigned location identity.
+    }
+    WorkLocationItem? listLocation;
+    for (final location in locations) {
+      if (locationId != null && location.id == locationId) {
+        listLocation = location;
+        break;
+      }
+    }
+    if (listLocation == null) {
+      final normalizedName = locationName.trim().toLowerCase();
+      for (final location in locations) {
+        if (normalizedName.isNotEmpty &&
+            location.name.trim().toLowerCase() == normalizedName) {
+          listLocation = location;
+          break;
+        }
+      }
+    }
+    final assetLocation = await _workLocationAssetService.findLocation(
+      locationId: locationId ?? listLocation?.id ?? todayLocation?.id,
+      locationName: locationName.isNotEmpty
+          ? locationName
+          : listLocation?.name ?? todayLocation?.name ?? '',
+    );
+    if (listLocation != null ||
+        todayLocation != null ||
+        assetLocation != null) {
+      return WorkLocationItem(
+        id: listLocation?.id ?? todayLocation?.id ?? assetLocation!.id,
+        name: listLocation?.name ?? todayLocation?.name ?? assetLocation!.name,
+        code: listLocation?.code ?? false,
+        latitude: listLocation?.latitude ??
+            todayLocation?.latitude ??
+            assetLocation?.latitude,
+        longitude: listLocation?.longitude ??
+            todayLocation?.longitude ??
+            assetLocation?.longitude,
+        allowedRadiusMeters: listLocation?.allowedRadiusMeters ??
+            todayLocation?.allowedRadiusMeters ??
+            assetLocation?.allowedRadiusMeters ??
+            WorkLocationAssetService.fallbackRadiusMeters,
+      );
+    }
+    throw const AttendanceRequestException(
+      'Location coordinates are not configured for this work location. Please contact the administrator.',
+    );
+  }
+
+  void _requireWorkLocationGeofence(WorkLocationItem location) {
+    if (location.latitude == null ||
+        location.longitude == null ||
+        location.allowedRadiusMeters == null) {
+      if (kDebugMode) {
+        debugPrint('Location: ${location.name}');
+        debugPrint('Location ID: ${location.id}');
+        debugPrint('Resolved latitude: ${location.latitude}');
+        debugPrint('Resolved longitude: ${location.longitude}');
+        debugPrint('Allowed Radius: ${location.allowedRadiusMeters}');
+      }
+      throw const AttendanceRequestException(
+        'Location coordinates are not configured for this work location. Please contact the administrator.',
+      );
+    }
+  }
+
+  void _validateCheckoutLocation({
+    required CheckInLocation checkIn,
+    required double latitude,
+    required double longitude,
+  }) {
+    if (latitude == 0 && longitude == 0) {
+      throw const AttendanceRequestException(
+        'A valid GPS location is required before you can check out.',
+      );
+    }
+
+    if (!checkIn.hasValidCoordinates ||
+        (checkIn.coordinateSource != 'backend_attendance' &&
+            checkIn.coordinateSource != 'backend_work_location' &&
+            checkIn.coordinateSource != 'work_location_catalog') ||
+        !checkIn.hasValidRadius) {
+      throw const AttendanceRequestException(
+        'Your check-in location could not be verified. Check-out was not submitted.',
+      );
+    }
+
+    final allowedRadius = checkIn.allowedRadiusMeters!;
+    final distance = LocationService.distanceInMeters(
+      startLatitude: checkIn.latitude,
+      startLongitude: checkIn.longitude,
+      endLatitude: latitude,
+      endLongitude: longitude,
+    );
+    if (kDebugMode) {
+      debugPrint('Check-in latitude: ${checkIn.latitude}');
+      debugPrint('Check-in longitude: ${checkIn.longitude}');
+      debugPrint('Current latitude: $latitude');
+      debugPrint('Current longitude: $longitude');
+      debugPrint('Allowed radius: $allowedRadius');
+      debugPrint('Calculated distance: $distance');
+      debugPrint(
+        'Location validation result: ${distance <= allowedRadius ? 'INSIDE' : 'OUTSIDE'}',
+      );
+    }
+    if (distance > allowedRadius) {
+      final locationName = checkIn.name.trim().isEmpty
+          ? 'your check-in location'
+          : checkIn.name.trim();
+      throw AttendanceRequestException(
+        'You cannot check out because you are not at your check-in location ($locationName). Please return to your check-in location and try again.',
+      );
+    }
   }
 
   /// 9. Get Employee Work Plan

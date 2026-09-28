@@ -2,9 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:sharqi/core/services/api_service.dart';
-import 'package:sharqi/core/services/auth_repository.dart';
-import 'package:sharqi/core/services/storage_service.dart';
+import 'package:self_service_app/core/services/api_service.dart';
+import 'package:self_service_app/core/services/auth_repository.dart';
+import 'package:self_service_app/core/services/storage_service.dart';
 
 class _FakeApiService extends ApiService {
   _FakeApiService(this.response, {this.delay = Duration.zero});
@@ -86,5 +86,26 @@ void main() {
     expect(result.isSuccess, isFalse);
     expect(result.error, 'Invalid OTP');
     expect(StorageService.getValue(StorageService.keyAccessToken), isEmpty);
+  });
+
+  test('restores a complete persisted login session', () async {
+    await StorageService.addValue(
+      StorageService.keyAccessToken,
+      'persisted-token',
+    );
+    await StorageService.addValue(StorageService.keyEmpNo, '2225');
+    await StorageService.addValue(StorageService.keyCompanyId, '1');
+
+    expect(StorageService.hasActiveSession(), isTrue);
+  });
+
+  test('does not restore an incomplete persisted login session', () async {
+    await StorageService.addValue(
+      StorageService.keyAccessToken,
+      'persisted-token',
+    );
+    await StorageService.addValue(StorageService.keyEmpNo, '2225');
+
+    expect(StorageService.hasActiveSession(), isFalse);
   });
 }

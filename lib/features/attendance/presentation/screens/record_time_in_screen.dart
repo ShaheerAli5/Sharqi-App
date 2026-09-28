@@ -68,13 +68,11 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
       if (kDebugMode) {
         debugPrint(
             '[RecordTimeIn] Attendance status: is_time_in=${status.isTimeIn}');
-        debugPrint("[RecordTimeIn] Fetching today's work plan...");
       }
-      final todayLoc = await _attendanceRepository.getTodayWorkLocation();
-      if (kDebugMode) debugPrint('[RecordTimeIn] Plan found: true');
 
       if (status.isTimeIn) {
         _isAlreadyTimeIn = true;
+        _isValidationComplete = true;
         _checkInTimeDisplay =
             _formatCheckInTime(status.lastTimeInDatetime, _now);
         if (mounted) {
@@ -86,7 +84,14 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
             ),
           );
         }
+        return;
       }
+
+      if (kDebugMode) {
+        debugPrint("[RecordTimeIn] Fetching today's work plan...");
+      }
+      final todayLoc = await _attendanceRepository.getTodayWorkLocation();
+      if (kDebugMode) debugPrint('[RecordTimeIn] Plan found: true');
 
       _selectedLocation = todayLoc;
       _detectedLocationName = todayLoc.name;
@@ -217,7 +222,9 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                   child: _isLoadingLocations
                       ? const Center(
                           child: CircularProgressIndicator(
-                              color: AppColors.primary))
+                            color: AppColors.primary,
+                          ),
+                        )
                       : ListView.separated(
                           shrinkWrap: true,
                           itemCount: _locations.length,
@@ -227,7 +234,6 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                           ),
                           itemBuilder: (context, index) {
                             final loc = _locations[index];
-                            final locName = loc.name;
                             final isSelected = _selectedLocation != null &&
                                 ((_selectedLocation is WorkLocationItem &&
                                         _selectedLocation.id == loc.id) ||
@@ -235,7 +241,7 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
                                         _selectedLocation.id == loc.id));
                             return ListTile(
                               title: Text(
-                                locName,
+                                loc.name,
                                 style: TextStyle(
                                   fontFamily: 'Outfit',
                                   fontSize: 15,
@@ -294,6 +300,8 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
         );
       }
 
+      await _validateCheckInWorkLocation(locationResult);
+
       if (!mounted) return;
       final confirm = await showDialog<bool>(
         context: context,
@@ -343,6 +351,12 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
               ? _selectedLocation.id
               : null);
 
+      await _persistSuccessfulCheckIn(
+        response: res,
+        checkedInAt: now,
+        attendanceId: timeInId,
+      );
+
       if (timeInId != null &&
           selectedId != null &&
           selectedId > 0 &&
@@ -375,6 +389,132 @@ class _RecordTimeInScreenState extends State<RecordTimeInScreen> {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  Future<void> _validateCheckInWorkLocation(
+    LocationResult currentLocation,
+  ) async {
+    final selected = _selectedLocation;
+    final name = selected is WorkLocationItem
+        ? selected.name.trim()
+        : selected is TodayWorkLocation
+            ? selected.name.trim()
+            : '';
+    final workLocationId = selected is WorkLocationItem
+        ? selected.id
+        : selected is TodayWorkLocation
+            ? selected.id
+            : null;
+    if (name.isEmpty || workLocationId == null) {
+      throw const AttendanceRequestException(
+        'Location coordinates are not configured for this work location. Please contact the administrator.',
+      );
+    }
+    final serverLocation = await _attendanceRepository.getWorkLocationFromApi(
+      locationId: workLocationId,
+      locationName: name,
+    );
+    if (serverLocation.latitude == null ||
+        serverLocation.longitude == null ||
+        serverLocation.allowedRadiusMeters == null) {
+      if (kDebugMode) {
+        debugPrint('Location: ${serverLocation.name}');
+        debugPrint('Location ID: ${serverLocation.id}');
+        debugPrint('Resolved latitude: ${serverLocation.latitude}');
+        debugPrint('Resolved longitude: ${serverLocation.longitude}');
+        debugPrint('Device Latitude: ${currentLocation.latitude}');
+        debugPrint('Device Longitude: ${currentLocation.longitude}');
+        debugPrint('Distance: unavailable');
+        debugPrint('Allowed Radius: ${serverLocation.allowedRadiusMeters}');
+      }
+      throw const AttendanceRequestException(
+        'Location coordinates are not configured for this work location. Please contact the administrator.',
+      );
+    }
+    final radius = serverLocation.allowedRadiusMeters!;
+    final distance = LocationService.distanceInMeters(
+      startLatitude: serverLocation.latitude!,
+      startLongitude: serverLocation.longitude!,
+      endLatitude: currentLocation.latitude,
+      endLongitude: currentLocation.longitude,
+    );
+    if (distance > radius) {
+      throw AttendanceRequestException(
+        'You cannot check in because you are not at your work location ($name). Please go to your work location and try again.',
+      );
+    }
+  }
+
+  Future<void> _persistSuccessfulCheckIn({
+    required Map<String, dynamic> response,
+    required DateTime checkedInAt,
+    required dynamic attendanceId,
+  }) async {
+    final selected = _selectedLocation;
+    final selectedName = selected is WorkLocationItem
+        ? selected.name
+        : selected is TodayWorkLocation
+            ? selected.name
+            : '';
+    final selectedId = selected is WorkLocationItem
+        ? selected.id
+        : selected is TodayWorkLocation
+            ? selected.id
+            : null;
+    final apiLocation = _locationMap(response);
+    final record = CheckInLocation(
+      employeeNumber: StorageService.getValue(StorageService.keyEmpNo),
+      companyId: StorageService.getValue(StorageService.keyCompanyId),
+      date: _apiDate(checkedInAt),
+      name: _firstText(
+              apiLocation, const ['name', 'location_name', 'area_name']) ??
+          selectedName,
+      workLocationId: _firstInt(
+            apiLocation,
+            const ['id', 'area_id', 'location_id', 'work_location_id'],
+          ) ??
+          selectedId,
+      attendanceId: attendanceId?.toString(),
+      latitude: 0,
+      longitude: 0,
+      coordinateSource: 'api_identity_only',
+    );
+    if (kDebugMode) {
+      debugPrint(
+        '[AttendanceGeofence] CHECK_IN identity location="${record.name}" id=${record.workLocationId}',
+      );
+    }
+    await StorageService.putObject(
+      StorageService.keyActiveCheckInLocation,
+      record.toJson(),
+    );
+  }
+
+  Map<String, dynamic> _locationMap(Map<String, dynamic> response) {
+    for (final key in const ['work_location', 'location', 'area', 'area_id']) {
+      final value = response[key];
+      if (value is Map) return Map<String, dynamic>.from(value);
+    }
+    return response;
+  }
+
+  int? _firstInt(Map<String, dynamic> source, List<String> keys) {
+    for (final key in keys) {
+      final value = source[key];
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      final parsed = int.tryParse(value?.toString() ?? '');
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  String? _firstText(Map<String, dynamic> source, List<String> keys) {
+    for (final key in keys) {
+      final value = source[key]?.toString().trim() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    return null;
   }
 
   Future<void> _showMessage(String message) => showDialog<void>(
