@@ -185,6 +185,31 @@ class AppDrawer extends StatelessWidget {
                         ),
                       ),
 
+                      Center(
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFC6134B)
+                                .withValues(alpha: 0.055),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            'Version: 1.0.0',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF8A8481),
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ),
+                      ),
+
                       // LOGOUT Button
                       SizedBox(
                         width: double.infinity,
@@ -389,9 +414,7 @@ class AppDrawer extends StatelessWidget {
                             height: 1.0,
                           ),
                         ),
-
                         const SizedBox(height: 6),
-
                         Row(
                           children: [
                             // Phone Chip

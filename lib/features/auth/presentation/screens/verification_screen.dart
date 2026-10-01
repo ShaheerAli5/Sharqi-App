@@ -81,9 +81,18 @@ class _VerificationScreenState extends State<VerificationScreen> {
       }
     }
     setState(() {});
+
+    final isComplete = _otpControllers.every(
+      (controller) => controller.text.trim().length == 1,
+    );
+    if (isComplete && !_isVerifying) {
+      FocusScope.of(context).unfocus();
+      unawaited(_onVerify());
+    }
   }
 
   Future<void> _onVerify() async {
+    if (_isVerifying) return;
     final otpCode = _otpControllers.map((c) => c.text).join();
     if (otpCode.length < 4) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -99,7 +108,8 @@ class _VerificationScreenState extends State<VerificationScreen> {
     if (empNumber.isEmpty || companyId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Missing required fields: Employee Number or Company ID.'),
+          content:
+              Text('Missing required fields: Employee Number or Company ID.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -182,8 +192,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
     const double badgeHeight = 29.0;
     const double badgeTopOffset = cardTopOffset - (badgeHeight / 2);
 
-    final formattedTimer =
-        '00:${_secondsRemaining.toString().padLeft(2, '0')}';
+    final formattedTimer = '00:${_secondsRemaining.toString().padLeft(2, '0')}';
 
     final savedPhone = StorageService.getValue(StorageService.keyPhone);
     final phoneEnding = savedPhone.length >= 4

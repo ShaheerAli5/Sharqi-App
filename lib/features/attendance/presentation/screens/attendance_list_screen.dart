@@ -1,39 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/attendance_repository.dart';
+import '../../../../data/models/attendance_item.dart';
 import '../../../../routes/app_routes.dart';
 import '../../../dashboard/presentation/widgets/app_drawer.dart';
-
-class AttendanceRecord {
-  final String dateNum;
-  final String dayName;
-  final String timeRange;
-  final String totalHours;
-  final String? otHours;
-  final bool isApproved;
-
-  const AttendanceRecord({
-    required this.dateNum,
-    required this.dayName,
-    required this.timeRange,
-    required this.totalHours,
-    this.otHours,
-    this.isApproved = false,
-  });
-}
-
-class AttendanceGroup {
-  final String dateRangeLabel;
-  final String groupTotalHours;
-  final List<AttendanceRecord> records;
-
-  const AttendanceGroup({
-    required this.dateRangeLabel,
-    required this.groupTotalHours,
-    required this.records,
-  });
-}
 
 class AttendanceListScreen extends StatefulWidget {
   const AttendanceListScreen({super.key});
@@ -43,555 +15,737 @@ class AttendanceListScreen extends StatefulWidget {
 }
 
 class _AttendanceListScreenState extends State<AttendanceListScreen> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final AttendanceRepository _attendanceRepository = AttendanceRepository();
-
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  final _repository = AttendanceRepository();
+  late DateTime _selectedMonth;
   bool _isLoading = true;
-  List<AttendanceGroup> _attendanceData = [];
-  int _presentCount = 0;
-  int _absentCount = 0;
-  double _totalOtHours = 0.0;
-  int _approvedCount = 0;
+  List<AttendanceItem> _records = const [];
 
-  late String _selectedMonth;
-  late List<String> _months;
+  static const _navy = Color(0xFF080D30);
+  static const _muted = Color(0xFF7180A3);
+  static const _green = Color(0xFF00A65A);
+  static const _red = Color(0xFFFF1744);
 
   @override
   void initState() {
     super.initState();
-    _months = _generateDynamicMonths();
-    _selectedMonth = _months.isNotEmpty ? _months.first : _formatMonthYear(DateTime.now());
-    _fetchAttendanceList();
-  }
-
-  static String _formatMonthYear(DateTime dt) {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '${months[dt.month - 1]}, ${dt.year}';
-  }
-
-  static List<String> _generateDynamicMonths() {
-    List<String> result = [];
     final now = DateTime.now();
-    for (int i = 0; i < 12; i++) {
-      final date = DateTime(now.year, now.month - i, 1);
-      result.add(_formatMonthYear(date));
-    }
-    return result;
+    _selectedMonth = DateTime(now.year, now.month);
+    _fetchAttendance();
   }
 
-  static Map<String, String>? _getStartAndEndDateForMonth(String monthStr) {
-    try {
-      final parts = monthStr.split(', ');
-      if (parts.length == 2) {
-        final monthName = parts[0];
-        final year = int.parse(parts[1]);
-        final monthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(monthName) + 1;
-        if (monthIndex > 0) {
-          final lastDay = DateTime(year, monthIndex + 1, 0).day;
-          final mStr = monthIndex.toString().padLeft(2, '0');
-          return {
-            'start_date': '$year-$mStr-01',
-            'end_date': '$year-$mStr-${lastDay.toString().padLeft(2, '0')}',
-          };
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  static String _getWeekRangeLabel(DateTime dt) {
-    final monday = dt.subtract(Duration(days: dt.weekday - 1));
-    final sunday = monday.add(const Duration(days: 6));
-
-    final monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    final startM = monthNames[monday.month - 1];
-    final endM = monthNames[sunday.month - 1];
-
-    if (startM == endM) {
-      return '$startM ${monday.day} – ${sunday.day}';
-    } else {
-      return '$startM ${monday.day} – $endM ${sunday.day}';
-    }
-  }
-
-  static String _formatTimeClean(String val) {
-    if (val.isEmpty || val == '—' || val == 'N/A') return '—';
-    final cleaned = val.replaceAll('.', ':').trim();
-    if (cleaned.contains(':')) {
-      final parts = cleaned.split(':');
-      final h = (int.tryParse(parts[0]) ?? 0).toString().padLeft(2, '0');
-      final m = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0).toString().padLeft(2, '0') : '00';
-      return '$h:$m';
-    }
-    final numVal = double.tryParse(val);
-    if (numVal != null) {
-      final h = numVal.floor().toString().padLeft(2, '0');
-      final m = ((numVal - numVal.floor()) * 60).round().toString().padLeft(2, '0');
-      return '$h:$m';
-    }
-    return val;
-  }
-
-  Future<void> _fetchAttendanceList() async {
+  Future<void> _fetchAttendance() async {
     setState(() => _isLoading = true);
     try {
-      final dates = _getStartAndEndDateForMonth(_selectedMonth);
-      final list = await _attendanceRepository.getAttendanceList(
-        startDate: dates?['start_date'],
-        endDate: dates?['end_date'],
+      final month = _selectedMonth.month.toString().padLeft(2, '0');
+      final prefix = '${_selectedMonth.year}-$month';
+      final lastDay = DateTime(
+        _selectedMonth.year,
+        _selectedMonth.month + 1,
+        0,
+      ).day;
+      final records = await _repository.getAttendanceList(
+        startDate: '$prefix-01',
+        endDate: '$prefix-${lastDay.toString().padLeft(2, '0')}',
       );
-
-      // Sort records by date and start time in descending order (newest date/day on top)
-      list.sort((a, b) {
-        int cmp = b.date.compareTo(a.date);
-        if (cmp != 0) return cmp;
-        return b.sTime.compareTo(a.sTime);
+      records.removeWhere(
+        (record) => record.date.isNotEmpty && !record.date.startsWith(prefix),
+      );
+      records.sort((a, b) {
+        final byDate = b.date.compareTo(a.date);
+        return byDate != 0 ? byDate : b.sTime.compareTo(a.sTime);
       });
-
-      final monthPrefix = dates?['start_date'] != null && dates!['start_date']!.length >= 7
-          ? dates['start_date']!.substring(0, 7)
-          : null;
-
-      Map<String, List<dynamic>> groupsMap = {};
-      int present = 0;
-      int absent = 0;
-      double totalOt = 0.0;
-      int approved = 0;
-
-      for (var item in list) {
-        // Strict filtering: ensure record date matches the selected month/year (e.g. "2026-09")
-        if (monthPrefix != null && item.date.isNotEmpty && !item.date.startsWith(monthPrefix)) {
-          continue;
-        }
-
-        if (item.workHours > 0) {
-          present++;
-        } else {
-          absent++;
-        }
-        totalOt += item.overtimeHours;
-        if (item.isApproved) {
-          approved++;
-        }
-
-        DateTime? dt;
-        if (item.date.isNotEmpty) {
-          dt = DateTime.tryParse(item.date);
-        }
-        final weekLabel = dt != null ? _getWeekRangeLabel(dt) : 'ATTENDANCE RECORDS';
-
-        groupsMap.putIfAbsent(weekLabel, () => []).add(item);
-      }
-
-      List<AttendanceGroup> groups = [];
-      groupsMap.forEach((label, items) {
-        double groupHours = 0.0;
-        List<AttendanceRecord> recs = [];
-
-        for (var item in items) {
-          groupHours += item.workHours;
-
-          String dayName = '';
-          if (item.date.isNotEmpty) {
-            final dt = DateTime.tryParse(item.date);
-            if (dt != null) {
-              final days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-              dayName = days[dt.weekday - 1];
-            }
-          }
-
-          final sTimeClean = _formatTimeClean(item.sTime);
-          final eTimeClean = _formatTimeClean(item.eTime);
-          final timeRangeStr = (sTimeClean.isNotEmpty && eTimeClean.isNotEmpty && sTimeClean != '—' && eTimeClean != '—')
-              ? '$sTimeClean – $eTimeClean'
-              : '—';
-
-          recs.add(AttendanceRecord(
-            dateNum: item.date.isNotEmpty ? item.date.split('-').last.padLeft(2, '0') : '',
-            dayName: dayName,
-            timeRange: timeRangeStr,
-            totalHours: item.workHours.toStringAsFixed(2).padLeft(5, '0'),
-            otHours: item.overtimeHours > 0 ? '+${item.overtimeHours.toStringAsFixed(2).padLeft(5, '0')}' : null,
-            isApproved: item.isApproved,
-          ));
-        }
-
-        groups.add(AttendanceGroup(
-          dateRangeLabel: label,
-          groupTotalHours: groupHours.toStringAsFixed(2),
-          records: recs,
-        ));
-      });
-
-      setState(() {
-        _presentCount = present;
-        _absentCount = absent;
-        _totalOtHours = totalOt;
-        _approvedCount = approved;
-        _attendanceData = groups;
-      });
+      if (mounted) setState(() => _records = records);
     } catch (_) {
-      setState(() => _attendanceData = []);
+      if (mounted) setState(() => _records = const []);
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _onBackPressed(BuildContext context) {
-    if (Navigator.canPop(context)) {
-      Navigator.pop(context);
-    } else {
-      Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
-    }
-  }
-
-  void _showMonthSelectionModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFFFBF6F3),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    'Select Month',
-                    style: TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1310),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Flexible(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: _months.length,
-                    separatorBuilder: (context, index) => const Divider(
-                      height: 1,
-                      color: AppColors.divider,
-                    ),
-                    itemBuilder: (context, index) {
-                      final month = _months[index];
-                      final isSelected = month == _selectedMonth;
-                      return ListTile(
-                        title: Text(
-                          month,
-                          style: TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 15,
-                            fontWeight: isSelected
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                            color: isSelected
-                                ? AppColors.primary
-                                : const Color(0xFF1A1310),
-                          ),
-                        ),
-                        trailing: isSelected
-                            ? const Icon(
-                                Icons.check_circle,
-                                color: AppColors.primary,
-                              )
-                            : null,
-                        onTap: () {
-                          setState(() {
-                            _selectedMonth = month;
-                          });
-                          Navigator.pop(context);
-                          _fetchAttendanceList();
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+  void _changeMonth(int offset) {
+    setState(() {
+      _selectedMonth = DateTime(
+        _selectedMonth.year,
+        _selectedMonth.month + offset,
+      );
+    });
+    _fetchAttendance();
   }
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-      ),
-    );
-
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+    ));
     return PopScope(
       canPop: Navigator.canPop(context),
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+        if (!didPop) {
+          Navigator.pushReplacementNamed(context, AppRoutes.dashboard);
+        }
       },
       child: Scaffold(
         key: _scaffoldKey,
         drawer: const AppDrawer(),
-        backgroundColor: AppColors.background,
-        body: Column(
-          children: [
-            _buildHeader(context),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFBF6F3),
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(24),
+        backgroundColor: const Color(0xFFF6FAFD),
+        body: Column(children: [
+          _buildHeader(),
+          Expanded(
+            child: RefreshIndicator(
+              color: AppColors.primary,
+              onRefresh: _fetchAttendance,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: _buildMonthSelector(),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildAttendanceCard(),
+                ],
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildHeader() => Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppColors.splashGradientStart,
+              AppColors.splashGradientMiddle,
+              AppColors.splashGradientEnd,
+            ],
+          ),
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: SizedBox(
+            height: 60,
+            child: Stack(alignment: Alignment.center, children: [
+              Positioned(
+                left: 14,
+                child: _headerButton(
+                  Icons.menu_rounded,
+                  () => _scaffoldKey.currentState?.openDrawer(),
+                ),
+              ),
+              const Text(
+                'Attendance List',
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Positioned(
+                right: 14,
+                child: _headerButton(
+                  Icons.filter_alt_rounded,
+                  _showMonthPicker,
+                ),
+              ),
+            ]),
+          ),
+        ),
+      );
+
+  Widget _headerButton(IconData icon, VoidCallback onTap) => Material(
+        color: Colors.white.withValues(alpha: 0.18),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 38,
+            height: 38,
+            child: Icon(icon, color: Colors.white, size: 23),
+          ),
+        ),
+      );
+
+  Widget _buildMonthSelector() => Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: _cardDecoration(17),
+        child: Row(children: [
+          _monthArrow(Icons.chevron_left_rounded, () => _changeMonth(-1)),
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: _showMonthPicker,
+              child:
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(
+                  Icons.calendar_month_outlined,
+                  color: _navy,
+                  size: 18,
+                ),
+                const SizedBox(width: 7),
+                Flexible(
+                  child: Text(
+                    _monthLabel(_selectedMonth),
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      color: _navy,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-                    : SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20.0,
-                          vertical: 20.0,
-                        ),
-                        child: Column(
-                          children: [
-                            _buildSummaryCard(),
-                            const SizedBox(height: 20),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'RECORDS',
-                                  style: TextStyle(
-                                    fontFamily: 'Outfit',
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF5E5855),
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                GestureDetector(
-                                  onTap: _showMonthSelectionModal,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.calendar_month_outlined,
-                                        size: 16,
-                                        color: Color(0xFFC6134B),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        _selectedMonth,
-                                        style: const TextStyle(
-                                          fontFamily: 'Outfit',
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFFC6134B),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 2),
-                                      const Icon(
-                                        Icons.keyboard_arrow_down_rounded,
-                                        size: 18,
-                                        color: Color(0xFFC6134B),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            _attendanceData.isEmpty
-                                ? const Padding(
-                                    padding: EdgeInsets.all(40.0),
-                                    child: Center(
-                                      child: Text(
-                                        'No attendance records found',
-                                        style: TextStyle(
-                                          fontFamily: 'Outfit',
-                                          fontSize: 14,
-                                          color: Color(0xFF888888),
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                : ListView.separated(
-                                    shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    itemCount: _attendanceData.length,
-                                    separatorBuilder: (context, index) =>
-                                        const SizedBox(height: 24),
-                                    itemBuilder: (context, index) {
-                                      final group = _attendanceData[index];
-                                      return _buildAttendanceGroup(group);
-                                    },
-                                  ),
-                            const SizedBox(height: 20),
-                          ],
-                        ),
+              ]),
+            ),
+          ),
+          _monthArrow(Icons.chevron_right_rounded, () => _changeMonth(1)),
+        ]),
+      );
+
+  Widget _monthArrow(IconData icon, VoidCallback onTap) => Material(
+        color: const Color(0xFFF8F7FD),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 34,
+            height: 34,
+            child: Icon(icon, color: _navy, size: 20),
+          ),
+        ),
+      );
+
+  Widget _buildAttendanceCard() => Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: _cardDecoration(18),
+        child: Column(children: [
+          _buildTableHeader(),
+          if (_isLoading)
+            const SizedBox(
+              height: 260,
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              ),
+            )
+          else if (_records.isEmpty)
+            const SizedBox(
+              height: 220,
+              child: Center(
+                child: Text(
+                  'No attendance records found',
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    color: _muted,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 7),
+              child: Column(
+                children: _records.map(_buildRecordRow).toList(),
+              ),
+            ),
+        ]),
+      );
+
+  BoxDecoration _cardDecoration(double radius) => BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF21385B).withValues(alpha: 0.07),
+            blurRadius: 24,
+            offset: const Offset(0, 9),
+          ),
+        ],
+      );
+
+  Widget _buildTableHeader() => Container(
+        height: 44,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFFFF4F7), Color(0xFFFFEAF0)],
+          ),
+        ),
+        child: Row(children: [
+          _headerCell(Icons.calendar_today_outlined, 'Date', 26),
+          _headerCell(Icons.article_outlined, 'Status', 25),
+          _headerCell(Icons.access_time_rounded, 'Time-In', 23),
+          _headerCell(Icons.access_time_rounded, 'Time-Out', 26),
+        ]),
+      );
+
+  Widget _headerCell(IconData icon, String label, int flex) => Expanded(
+        flex: flex,
+        child: Container(
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            border: Border(right: BorderSide(color: Colors.white, width: 1.5)),
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, color: AppColors.primary, size: 15),
+            const SizedBox(width: 3),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  color: AppColors.primary,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ]),
+        ),
+      );
+
+  Widget _buildRecordRow(AttendanceItem record) {
+    final date = DateTime.tryParse(record.date);
+    final present = record.workHours > 0 || _hasTime(record.sTime);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(13),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(13),
+          onTap: () => _showDetails(record),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(13),
+              border: Border.all(color: const Color(0xFFE8EDF4)),
+              gradient: LinearGradient(
+                colors: [
+                  present
+                      ? _green.withValues(alpha: 0.045)
+                      : _red.withValues(alpha: 0.045),
+                  Colors.white,
+                ],
+                stops: const [0, 0.28],
+              ),
+            ),
+            child: Row(children: [
+              Expanded(flex: 27, child: _dateCell(date, record.date)),
+              Expanded(flex: 26, child: _statusChip(present)),
+              Expanded(flex: 22, child: _timeChip(record.sTime, true)),
+              Expanded(
+                flex: 25,
+                child: Row(children: [
+                  Expanded(child: _timeChip(record.eTime, false)),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 14,
+                    color: _muted,
+                  ),
+                ]),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dateCell(DateTime? date, String fallback) {
+    final text = date == null
+        ? fallback
+        : '${date.day.toString().padLeft(2, '0')}-'
+            '${date.month.toString().padLeft(2, '0')}-'
+            '${date.year.toString().substring(2)}';
+    return Padding(
+      padding: const EdgeInsets.only(left: 5),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            text,
+            maxLines: 1,
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              color: _navy,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(
+            date == null ? '' : _weekday(date.weekday),
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              color: _muted,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusChip(bool present) {
+    final color = present ? _green : _red;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 3),
+        Flexible(
+          child: Text(
+            present ? 'Present' : 'Absent',
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'Outfit',
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _timeChip(String value, bool timeIn) {
+    final available = _hasTime(value);
+    final color = timeIn ? _green : _red;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 1.5),
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 5),
+      decoration: BoxDecoration(
+        color: available
+            ? color.withValues(alpha: 0.075)
+            : const Color(0xFFF3F5F8),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(
+          Icons.access_time_rounded,
+          color: available ? color : _muted,
+          size: 13,
+        ),
+        const SizedBox(width: 2),
+        Flexible(
+          child: Text(
+            _formatTime(value),
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              color: _navy,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  void _showDetails(AttendanceItem record) {
+    final present = record.workHours > 0 || _hasTime(record.sTime);
+    final statusColor = present ? _green : _red;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 22),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF8FAFD),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _sheetHandle(),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFFC6134B), Color(0xFF850D37)],
+                  ),
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.2),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(15),
                       ),
+                      child: const Icon(
+                        Icons.badge_outlined,
+                        color: Colors.white,
+                        size: 25,
+                      ),
+                    ),
+                    const SizedBox(width: 13),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'ATTENDANCE RECORD',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              color: Color(0xFFFFC8D9),
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _detailDateLabel(record.date),
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            present ? 'Present' : 'Absent',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              color: statusColor,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFE7ECF3)),
+                ),
+                child: Row(
+                  children: [
+                    _timePoint(
+                      'CLOCK IN',
+                      _formatTime(record.sTime),
+                      _green,
+                      Icons.login_rounded,
+                    ),
+                    Column(
+                      children: [
+                        const Icon(
+                          Icons.arrow_forward_rounded,
+                          color: Color(0xFFB3BDD0),
+                          size: 20,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${record.workHours.toStringAsFixed(2)} h',
+                          style: const TextStyle(
+                            fontFamily: 'Outfit',
+                            color: _muted,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    _timePoint(
+                      'CLOCK OUT',
+                      _formatTime(record.eTime),
+                      _red,
+                      Icons.logout_rounded,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _metricCard(
+                      Icons.schedule_rounded,
+                      'Work hours',
+                      '${record.workHours.toStringAsFixed(2)} h',
+                      const Color(0xFF3156C8),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _metricCard(
+                      Icons.bolt_rounded,
+                      'Overtime',
+                      '${record.overtimeHours.toStringAsFixed(2)} h',
+                      const Color(0xFFE48A00),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _timePoint(
+    String label,
+    String value,
+    Color color,
+    IconData icon,
+  ) =>
+      Expanded(
+        child: Column(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                color: _muted,
+                fontSize: 8.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.7,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                color: _navy,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
+      );
 
-  Widget _buildSummaryCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildSummaryItem(
-              value: _presentCount.toString(),
-              label: 'PRESENT',
-              valueColor: const Color(0xFF1E854A),
-            ),
-          ),
-          _buildDivider(),
-          Expanded(
-            child: _buildSummaryItem(
-              value: _absentCount.toString(),
-              label: 'ABSENT',
-              valueColor: const Color(0xFFC6134B),
-            ),
-          ),
-          _buildDivider(),
-          Expanded(
-            child: _buildSummaryItem(
-              value: '${_totalOtHours.toStringAsFixed(0)}h',
-              label: 'TOTAL OT',
-              valueColor: const Color(0xFF8A5A10),
-            ),
-          ),
-          _buildDivider(),
-          Expanded(
-            child: _buildSummaryItem(
-              value: _approvedCount.toString(),
-              label: 'APPROVED',
-              valueColor: const Color(0xFF1A1310),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryItem({
-    required String value,
-    required String label,
-    required Color valueColor,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontFamily: 'Outfit',
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: valueColor,
-            height: 1.0,
-          ),
+  Widget _metricCard(
+    IconData icon,
+    String label,
+    String value,
+    Color color,
+  ) =>
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(color: color.withValues(alpha: 0.12)),
         ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            fontFamily: 'Outfit',
-            fontSize: 9.5,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF888888),
-            letterSpacing: 0.3,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDivider() {
-    return Container(
-      width: 1,
-      height: 28,
-      color: const Color(0xFFEEEEEE),
-    );
-  }
-
-  Widget _buildAttendanceGroup(AttendanceGroup group) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Row(
           children: [
-            Text(
-              group.dateRangeLabel,
-              style: const TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF666666),
-                letterSpacing: 0.3,
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
               ),
+              child: Icon(icon, color: color, size: 17),
             ),
-            Text.rich(
-              TextSpan(
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextSpan(
-                    text: group.groupTotalHours,
+                  Text(
+                    label,
                     style: const TextStyle(
                       fontFamily: 'Outfit',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFFC6134B),
+                      color: _muted,
+                      fontSize: 9.5,
                     ),
                   ),
-                  const TextSpan(
-                    text: 'h',
-                    style: TextStyle(
+                  Text(
+                    value,
+                    style: const TextStyle(
                       fontFamily: 'Outfit',
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF888888),
+                      color: _navy,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
@@ -599,214 +753,148 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        const Divider(height: 1, color: Color(0xFFE8DFE1)),
-        const SizedBox(height: 8),
-        ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: group.records.length,
-          separatorBuilder: (context, index) =>
-              const Divider(height: 16, color: Color(0xFFF2ECE8)),
-          itemBuilder: (context, index) {
-            final record = group.records[index];
-            return _buildRecordRow(record);
-          },
-        ),
-      ],
-    );
-  }
+      );
 
-  Widget _buildRecordRow(AttendanceRecord record) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 36,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  record.dateNum,
-                  style: const TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A1310),
-                    height: 1.0,
-                  ),
-                ),
-                Text(
-                  record.dayName,
-                  style: const TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF888888),
-                    height: 1.1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              record.timeRange,
-              style: const TextStyle(
+  Widget _sheetHandle() => Container(
+        width: 42,
+        height: 4,
+        decoration: BoxDecoration(
+          color: const Color(0xFFDCE1E9),
+          borderRadius: BorderRadius.circular(4),
+        ),
+      );
+
+  void _showMonthPicker() {
+    final now = DateTime.now();
+    final months = List.generate(
+      12,
+      (index) => DateTime(now.year, now.month - index),
+    );
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 22),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _sheetHandle(),
+            const SizedBox(height: 14),
+            const Text(
+              'Select Month',
+              style: TextStyle(
                 fontFamily: 'Outfit',
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
-                color: Color(0xFF555555),
+                color: _navy,
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
               ),
             ),
-          ),
-          Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: record.totalHours,
-                  style: const TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A1310),
-                  ),
-                ),
-                const TextSpan(
-                  text: 'h',
-                  style: TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF888888),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          if (record.otHours != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFDEED9),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                record.otHours!,
-                style: const TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF8A5A10),
-                ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: months.length,
+                itemBuilder: (context, index) {
+                  final month = months[index];
+                  final selected = month.year == _selectedMonth.year &&
+                      month.month == _selectedMonth.month;
+                  return ListTile(
+                    leading: const Icon(Icons.calendar_month_outlined),
+                    title: Text(_monthLabel(month)),
+                    trailing: selected
+                        ? const Icon(
+                            Icons.check_circle,
+                            color: AppColors.primary,
+                          )
+                        : null,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _selectedMonth = month);
+                      _fetchAttendance();
+                    },
+                  );
+                },
               ),
             ),
-            const SizedBox(width: 8),
-          ] else ...[
-            const SizedBox(width: 52),
-          ],
-          if (record.isApproved)
-            Container(
-              width: 18,
-              height: 18,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFFE2F7EB),
-              ),
-              child: const Icon(
-                Icons.check_rounded,
-                size: 12,
-                color: Color(0xFF1E854A),
-              ),
-            )
-          else
-            Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: const Color(0xFFB0A8A4),
-                  width: 1.5,
-                ),
-              ),
-            ),
-        ],
+          ]),
+        ),
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.splashGradientStart,
-            AppColors.splashGradientMiddle,
-            AppColors.splashGradientEnd,
-          ],
-          stops: [0.0, 0.5, 1.0],
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Container(
-          height: 60,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: GestureDetector(
-                  onTap: () => _onBackPressed(context),
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    padding: const EdgeInsets.fromLTRB(6, 1, 6, 1),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(13),
-                    ),
-                    child: const Icon(
-                      Icons.chevron_left_rounded,
-                      color: Colors.white,
-                      size: 26,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(
-                height: 15,
-                child: Center(
-                  child: Text(
-                    'ATTENDANCE LIST',
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    softWrap: false,
-                    style: TextStyle(
-                      fontFamily: 'Outfit',
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.68,
-                      height: 1.0,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  static bool _hasTime(String value) {
+    final normalized = value.trim().toLowerCase();
+    return normalized.isNotEmpty &&
+        normalized != '—' &&
+        normalized != 'n/a' &&
+        normalized != 'false';
+  }
+
+  static String _formatTime(String value) {
+    if (!_hasTime(value)) return '--:--';
+    final cleaned = value.trim().replaceAll('.', ':');
+    final parts = cleaned.split(':');
+    if (parts.length >= 2) {
+      final hour = int.tryParse(parts[0]);
+      final minute = int.tryParse(parts[1]);
+      if (hour != null && minute != null) {
+        return '${hour.toString().padLeft(2, '0')}:'
+            '${minute.toString().padLeft(2, '0')}';
+      }
+    }
+    final decimal = double.tryParse(value);
+    if (decimal != null) {
+      final hour = decimal.floor();
+      final minute = ((decimal - hour) * 60).round();
+      return '${hour.toString().padLeft(2, '0')}:'
+          '${minute.toString().padLeft(2, '0')}';
+    }
+    return value;
+  }
+
+  static String _monthLabel(DateTime date) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return '${months[date.month - 1]}, ${date.year}';
+  }
+
+  static String _detailDateLabel(String value) {
+    final date = DateTime.tryParse(value);
+    if (date == null) return value;
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${_weekday(date.weekday)}, ${date.day} '
+        '${months[date.month - 1]} ${date.year}';
+  }
+
+  static String _weekday(int weekday) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days[weekday - 1];
   }
 }

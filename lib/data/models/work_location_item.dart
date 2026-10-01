@@ -5,6 +5,7 @@ class WorkLocationItem {
   final double? latitude;
   final double? longitude;
   final double? allowedRadiusMeters;
+  final bool overrideApiCoordinates;
 
   WorkLocationItem({
     required this.id,
@@ -13,6 +14,7 @@ class WorkLocationItem {
     this.latitude,
     this.longitude,
     this.allowedRadiusMeters,
+    this.overrideApiCoordinates = false,
   });
 
   factory WorkLocationItem.fromJson(Map<String, dynamic> json) {
@@ -40,6 +42,7 @@ class WorkLocationItem {
         ],
         positiveOnly: true,
       ),
+      overrideApiCoordinates: json['override_api_coordinates'] == true,
     );
   }
 
@@ -65,6 +68,7 @@ class WorkLocationItem {
     if (key == 'latitude' || key == 'lat') return latitude;
     if (key == 'longitude' || key == 'long') return longitude;
     if (key == 'radius') return allowedRadiusMeters;
+    if (key == 'override_api_coordinates') return overrideApiCoordinates;
     return null;
   }
 }

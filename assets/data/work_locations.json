@@ -199,9 +199,11 @@
   },
   {
     "id": 477,
-    "name": "Raffels Hotel",
-    "latitude": 25.3877259196071,
-    "longitude": 51.5312497503873
+    "name": "Raffles Hotel",
+    "latitude": 25.38953,
+    "longitude": 51.5315,
+    "allowed_radius_meters": 175,
+    "override_api_coordinates": true
   },
   {
     "id": 478,
@@ -212,8 +214,10 @@
   {
     "id": 479,
     "name": "Fairmont Hotel",
-    "latitude": 25.3877259196071,
-    "longitude": 51.5312497503873
+    "latitude": 25.3885,
+    "longitude": 51.53125,
+    "allowed_radius_meters": 175,
+    "override_api_coordinates": true
   },
   {
     "id": 481,
@@ -904,5 +908,13 @@
     "name": "Beiruti Restaurant",
     "latitude": 25.388297,
     "longitude": 51.531819
+  },
+  {
+    "id": 1311,
+    "name": "MALL OF KPK",
+    "latitude": 34.0010498,
+    "longitude": 71.4974286,
+    "allowed_radius_meters": 175,
+    "override_api_coordinates": true
   }
 ]

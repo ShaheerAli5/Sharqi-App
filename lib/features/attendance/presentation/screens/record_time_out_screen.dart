@@ -29,6 +29,7 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
 
   bool _isDetectingLocation = false;
   String? _detectedLocationName;
+  String? _listedCheckInLocationName;
 
   late Timer _timer;
   late DateTime _now;
@@ -66,6 +67,21 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
         });
         await _detectCurrentLocation();
         return;
+      }
+
+      try {
+        final listedLocation =
+            await _attendanceRepository.getActiveCheckInLocationForCheckout(
+          activeStatus: status,
+        );
+        if (mounted) {
+          setState(() {
+            _listedCheckInLocationName = listedLocation.name.trim();
+          });
+        }
+      } on AttendanceRequestException {
+        // Submission will show the detailed validation error if the active
+        // location cannot be resolved. Current GPS detection can still load.
       }
 
       if (status.lastTimeInDatetime.isNotEmpty) {
@@ -269,6 +285,9 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
       return;
     }
     if (!mounted) return;
+    setState(() {
+      _listedCheckInLocationName = checkInLocation?.name.trim();
+    });
     if (checkInLocation == null || !checkInLocation.hasValidCoordinates) {
       setState(() => _isSubmitting = false);
       await _showCheckoutLocationAlert(
@@ -347,7 +366,7 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
           style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold),
         ),
         content: Text(
-          'Are you sure you want to record time out at ${_detectedLocationName ?? "current location"}?',
+          'Are you sure you want to record time out at ${_listedCheckInLocationName ?? _detectedLocationName ?? "current location"}?',
           style: const TextStyle(fontFamily: 'Outfit'),
         ),
         actions: [
@@ -711,6 +730,9 @@ class _RecordTimeOutScreenState extends State<RecordTimeOutScreen> {
     String locationName = 'Current Location';
     if (_isDetectingLocation) {
       locationName = 'Detecting current location...';
+    } else if (_listedCheckInLocationName != null &&
+        _listedCheckInLocationName!.isNotEmpty) {
+      locationName = _listedCheckInLocationName!;
     } else if (_detectedLocationName != null &&
         _detectedLocationName!.trim().isNotEmpty) {
       locationName = _detectedLocationName!;

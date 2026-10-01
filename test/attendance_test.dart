@@ -219,8 +219,11 @@ void main() {
       final locations = await service.loadLocations();
       final alAzzizya = await service.findLocation(locationId: 416);
       final headOffice = await service.findLocation(locationId: 1197);
+      final raffles = await service.findLocation(locationId: 477);
+      final fairmont = await service.findLocation(locationId: 479);
+      final mallOfKpk = await service.findLocation(locationName: 'mall of kpk');
 
-      expect(locations.length, 151);
+      expect(locations.length, 152);
       expect(alAzzizya, isNotNull);
       expect(alAzzizya!.name, 'Al-Azzizya Hotel');
       expect(alAzzizya.latitude, 25.2695064390565);
@@ -229,11 +232,27 @@ void main() {
       expect(headOffice!.name, 'Head Office');
       expect(headOffice.latitude, 25.388663682696095);
       expect(headOffice.longitude, 51.5224497449326);
+      expect(raffles, isNotNull);
+      expect(raffles!.name, 'Raffles Hotel');
+      expect(raffles.latitude, 25.38953);
+      expect(raffles.longitude, 51.5315);
+      expect(raffles.allowedRadiusMeters, 175);
+      expect(raffles.overrideApiCoordinates, isTrue);
+      expect(fairmont, isNotNull);
+      expect(fairmont!.latitude, 25.3885);
+      expect(fairmont.longitude, 51.53125);
+      expect(fairmont.overrideApiCoordinates, isTrue);
+      expect(mallOfKpk, isNotNull);
+      expect(mallOfKpk!.id, 1311);
+      expect(mallOfKpk.latitude, 34.0010498);
+      expect(mallOfKpk.longitude, 71.4974286);
+      expect(mallOfKpk.allowedRadiusMeters, 175);
+      expect(mallOfKpk.overrideApiCoordinates, isTrue);
       expect(
         locations.any((location) => location.name == 'Office'),
         isFalse,
       );
-      expect(WorkLocationAssetService.fallbackRadiusMeters, 100);
+      expect(WorkLocationAssetService.fallbackRadiusMeters, 175);
     });
 
     test('Distance calculation uses geodesic meters, not coordinate equality',

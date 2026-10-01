@@ -6,7 +6,10 @@ import '../../data/models/work_location_item.dart';
 
 class WorkLocationAssetService {
   static const String assetPath = 'assets/data/work_locations.json';
-  static const double fallbackRadiusMeters = 100;
+  // Client sites commonly include large hotels, malls, towers, car parks, and
+  // indoor areas where phone GPS can drift. Individual locations may provide
+  // a tighter/custom radius in the catalog.
+  static const double fallbackRadiusMeters = 175;
 
   final AssetBundle _bundle;
   List<WorkLocationItem>? _cachedLocations;

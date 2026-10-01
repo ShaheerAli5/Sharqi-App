@@ -261,12 +261,24 @@ class AttendanceRepository {
           'The server returned an unexpected work-location response.',
         );
       }
-      return result
+      final apiLocations = result
           .whereType<Map>()
           .map((item) => WorkLocationItem.fromJson(
                 Map<String, dynamic>.from(item),
               ))
           .toList();
+      final bundledLocations = await _workLocationAssetService.loadLocations();
+      final knownIds = apiLocations.map((location) => location.id).toSet();
+      final knownNames = apiLocations
+          .map((location) => location.name.trim().toLowerCase())
+          .toSet();
+      for (final location in bundledLocations) {
+        if (!knownIds.contains(location.id) &&
+            !knownNames.contains(location.name.trim().toLowerCase())) {
+          apiLocations.add(location);
+        }
+      }
+      return apiLocations;
     });
   }
 
@@ -377,7 +389,7 @@ class AttendanceRepository {
         final response = await _apiService.recordTimeIn(
           employeeNumber: session['employee_number'],
           companyId: session['company_id'],
-          apiToken: session['api_token'],
+          apiToken: session['api_token'] ,
           date: date,
           timeIn: timeIn,
           lat: latitude,
@@ -456,32 +468,17 @@ class AttendanceRepository {
     return {'error': 'Failed to record Time Out'};
   }
 
-  Future<CheckInLocation> getActiveCheckInLocationForCheckout() async {
+  Future<CheckInLocation> getActiveCheckInLocationForCheckout({
+    TimeInOutStatus? activeStatus,
+  }) async {
     final employeeNumber =
         StorageService.getValue(StorageService.keyEmpNo).trim();
     final companyId =
         StorageService.getValue(StorageService.keyCompanyId).trim();
-    final status = await getTodaysTimeInOut();
+    final status = activeStatus ?? await getTodaysTimeInOut();
     if (!status.isTimeIn) {
       throw const AttendanceRequestException(
         'No active check-in record was found. Check-out was not submitted.',
-      );
-    }
-
-    if (status.checkInLatitude != null &&
-        status.checkInLongitude != null &&
-        status.allowedRadiusMeters != null) {
-      return CheckInLocation(
-        employeeNumber: employeeNumber,
-        companyId: companyId,
-        date: '',
-        name: status.checkInLocationName,
-        workLocationId: status.checkInLocationId,
-        attendanceId: status.attendanceId,
-        latitude: status.checkInLatitude!,
-        longitude: status.checkInLongitude!,
-        allowedRadiusMeters: status.allowedRadiusMeters,
-        coordinateSource: 'backend_attendance',
       );
     }
 
@@ -504,6 +501,22 @@ class AttendanceRepository {
             ? stored.name.trim()
             : '';
     if (expectedLocationId == null && expectedLocationName.isEmpty) {
+      if (status.checkInLatitude != null &&
+          status.checkInLongitude != null &&
+          status.allowedRadiusMeters != null) {
+        return CheckInLocation(
+          employeeNumber: employeeNumber,
+          companyId: companyId,
+          date: '',
+          name: status.checkInLocationName,
+          workLocationId: status.checkInLocationId,
+          attendanceId: status.attendanceId,
+          latitude: status.checkInLatitude!,
+          longitude: status.checkInLongitude!,
+          allowedRadiusMeters: status.allowedRadiusMeters,
+          coordinateSource: 'backend_attendance',
+        );
+      }
       throw const AttendanceRequestException(
         'Your active check-in location could not be verified. Check-out was not submitted.',
       );
@@ -577,20 +590,34 @@ class AttendanceRepository {
     if (listLocation != null ||
         todayLocation != null ||
         assetLocation != null) {
+      // The bundled catalog is the app's curated geofence source. Prefer it for
+      // every known location so stale Odoo coordinates cannot make the label
+      // and the check-in geofence refer to different places.
+      final useAssetCoordinates = assetLocation != null;
       return WorkLocationItem(
         id: listLocation?.id ?? todayLocation?.id ?? assetLocation!.id,
-        name: listLocation?.name ?? todayLocation?.name ?? assetLocation!.name,
+        name: useAssetCoordinates
+            ? assetLocation.name
+            : listLocation?.name ?? todayLocation?.name ?? assetLocation!.name,
         code: listLocation?.code ?? false,
-        latitude: listLocation?.latitude ??
-            todayLocation?.latitude ??
-            assetLocation?.latitude,
-        longitude: listLocation?.longitude ??
-            todayLocation?.longitude ??
-            assetLocation?.longitude,
-        allowedRadiusMeters: listLocation?.allowedRadiusMeters ??
-            todayLocation?.allowedRadiusMeters ??
-            assetLocation?.allowedRadiusMeters ??
+        latitude: useAssetCoordinates
+            ? assetLocation.latitude
+            : listLocation?.latitude ??
+                todayLocation?.latitude ??
+                assetLocation?.latitude,
+        longitude: useAssetCoordinates
+            ? assetLocation.longitude
+            : listLocation?.longitude ??
+                todayLocation?.longitude ??
+                assetLocation?.longitude,
+        allowedRadiusMeters: useAssetCoordinates
+            ? assetLocation.allowedRadiusMeters ??
+                WorkLocationAssetService.fallbackRadiusMeters
+            : listLocation?.allowedRadiusMeters ??
+                todayLocation?.allowedRadiusMeters ??
+                assetLocation?.allowedRadiusMeters ??
             WorkLocationAssetService.fallbackRadiusMeters,
+        overrideApiCoordinates: useAssetCoordinates,
       );
     }
     throw const AttendanceRequestException(

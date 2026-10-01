@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/services/auth_repository.dart';
@@ -15,8 +16,44 @@ class SignInScreen extends StatefulWidget {
 }
 
 class _SignInScreenState extends State<SignInScreen> {
-  final TextEditingController _employeeNumberController = TextEditingController();
+  final TextEditingController _employeeNumberController =
+      TextEditingController();
   final AuthRepository _authRepository = AuthRepository();
+
+  Future<void> _openHrSupportEmail() async {
+    const email = 'usman@alsharqiholding.qa';
+    final webComposeUri = Uri.https('mail.google.com', '/mail/', {
+      'view': 'cm',
+      'fs': '1',
+      'to': email,
+      'su': 'Self Service App Support',
+    });
+    final emailAppUri = Uri(
+      scheme: 'mailto',
+      path: email,
+      queryParameters: const {'subject': 'Self Service App Support'},
+    );
+
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        webComposeUri,
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {}
+    if (!opened) {
+      try {
+        opened = await launchUrl(emailAppUri);
+      } catch (_) {}
+    }
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to open email. Please contact $email.'),
+        ),
+      );
+    }
+  }
 
   List<dynamic> _companies = [];
   dynamic _selectedCompany;
@@ -100,7 +137,9 @@ class _SignInScreenState extends State<SignInScreen> {
                 const SizedBox(height: 12),
                 Flexible(
                   child: _isLoadingCompanies
-                      ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                              color: AppColors.primary))
                       : ListView.separated(
                           shrinkWrap: true,
                           itemCount: _companies.length,
@@ -110,19 +149,25 @@ class _SignInScreenState extends State<SignInScreen> {
                           ),
                           itemBuilder: (context, index) {
                             final company = _companies[index];
-                            final companyName = company['name'] ?? company.toString();
+                            final companyName =
+                                company['name'] ?? company.toString();
                             final isSelected = company == _selectedCompany;
                             return ListTile(
                               title: Text(
                                 companyName,
                                 style: TextStyle(
                                   fontSize: 15,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                  color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  color: isSelected
+                                      ? AppColors.primary
+                                      : AppColors.textPrimary,
                                 ),
                               ),
                               trailing: isSelected
-                                  ? const Icon(Icons.check_circle, color: AppColors.primary)
+                                  ? const Icon(Icons.check_circle,
+                                      color: AppColors.primary)
                                   : null,
                               onTap: () {
                                 setState(() {
@@ -142,7 +187,8 @@ class _SignInScreenState extends State<SignInScreen> {
     );
   }
 
-  Future<void> _showWhatsAppInputDialog(String empNumber, String companyId) async {
+  Future<void> _showWhatsAppInputDialog(
+      String empNumber, String companyId) async {
     final TextEditingController phoneController = TextEditingController();
     final bool? submitted = await showDialog<bool>(
       context: context,
@@ -186,7 +232,8 @@ class _SignInScreenState extends State<SignInScreen> {
                         color: Colors.grey.shade400,
                         fontSize: 14,
                       ),
-                      prefixIcon: const Icon(Icons.phone, color: AppColors.primary),
+                      prefixIcon:
+                          const Icon(Icons.phone, color: AppColors.primary),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: const BorderSide(color: Color(0xFFE8DFE1)),
@@ -202,7 +249,8 @@ class _SignInScreenState extends State<SignInScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                  child: const Text('Cancel',
+                      style: TextStyle(color: Colors.grey)),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -218,7 +266,8 @@ class _SignInScreenState extends State<SignInScreen> {
                           if (phone.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Please enter your WhatsApp number'),
+                                content:
+                                    Text('Please enter your WhatsApp number'),
                               ),
                             );
                             return;
@@ -238,7 +287,8 @@ class _SignInScreenState extends State<SignInScreen> {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text(res.error ?? 'Failed to register WhatsApp number'),
+                                    content: Text(res.error ??
+                                        'Failed to register WhatsApp number'),
                                     backgroundColor: Colors.red.shade700,
                                   ),
                                 );
@@ -261,11 +311,13 @@ class _SignInScreenState extends State<SignInScreen> {
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2),
                         )
                       : const Text(
                           'Register & Send OTP',
-                          style: TextStyle(color: Colors.white, fontFamily: 'Outfit'),
+                          style: TextStyle(
+                              color: Colors.white, fontFamily: 'Outfit'),
                         ),
                 ),
               ],
@@ -333,7 +385,8 @@ class _SignInScreenState extends State<SignInScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(otpRes.error ?? 'Employee number not registered for this company.'),
+              content: Text(otpRes.error ??
+                  'Employee number not registered for this company.'),
               backgroundColor: Colors.red.shade700,
             ),
           );
@@ -593,7 +646,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     const SizedBox(height: 24),
                     Center(
                       child: GestureDetector(
-                        onTap: () {},
+                        onTap: _openHrSupportEmail,
                         child: Text.rich(
                           TextSpan(
                             children: [
